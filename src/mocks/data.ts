@@ -1,0 +1,64 @@
+import type { Expense, Journey } from '../types'
+
+export const MOCK_JOURNEYS: Journey[] = [
+  {
+    id: '1',
+    name: '26년 4월 후쿠오카',
+    country: '일본',
+    currency: 'JPY',
+    rate: 9.0,
+    rateMode: 'fixed',
+    status: 'active',
+    startDate: '2026-04-20',
+    endDate: '2026-04-25',
+    participants: ['나', '지수', '민호'],
+    selfParticipant: '나',
+  },
+]
+
+export const MOCK_EXPENSES: Expense[] = [
+  {
+    id: '101',
+    journeyId: '1',
+    store: '이치란 라멘',
+    amountLocal: 3200,
+    splitAmong: 3,
+    method: 'card',
+    category: '식비',
+    time: '21:30',
+    date: '2026-04-21',
+    type: 'shared',
+    payer: '나',
+    emoji: '🍜',
+    memo: '인생 라멘 등극! 웨이팅 아깝지 않음',
+  },
+  {
+    id: '102',
+    journeyId: '1',
+    store: '세븐일레븐',
+    amountLocal: 450,
+    method: 'cash',
+    category: '식비',
+    time: '23:45',
+    date: '2026-04-21',
+    type: 'private',
+    payer: '나',
+    emoji: '🍦',
+    memo: '편의점 털기',
+  },
+  {
+    id: '103',
+    journeyId: '1',
+    store: '돈키호테',
+    amountLocal: 5400,
+    method: 'card',
+    category: '쇼핑',
+    time: '14:20',
+    date: '2026-04-20',
+    type: 'shared',
+    payer: '지수',
+    emoji: '🎁',
+    memo: '선물 쇼핑 완료',
+  },
+]
+
