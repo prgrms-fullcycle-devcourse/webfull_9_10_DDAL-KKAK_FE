@@ -1,21 +1,21 @@
-import { ImagePlus, RefreshCcw, X } from 'lucide-react'
-import { useRef, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
-import type { OcrDraft } from '../types'
-import { fileToDataUrl } from '../lib/image'
+import { ImagePlus, RefreshCcw, X } from 'lucide-react';
+import { useRef, useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
+import type { OcrDraft } from '@/features/ocr/types';
+import { fileToDataUrl } from '../lib/image';
 
 export function ScanPage() {
-  const nav = useNavigate()
-  const { journeyId } = useParams()
-  const [isScanning, setIsScanning] = useState(false)
-  const cameraInputRef = useRef<HTMLInputElement | null>(null)
-  const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const nav = useNavigate();
+  const { journeyId } = useParams();
+  const [isScanning, setIsScanning] = useState(false);
+  const cameraInputRef = useRef<HTMLInputElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const handlePick = async (file: File) => {
-    if (!journeyId) return
-    setIsScanning(true)
-    const imageDataUrl = await fileToDataUrl(file)
-    await new Promise((r) => setTimeout(r, 700))
+    if (!journeyId) return;
+    setIsScanning(true);
+    const imageDataUrl = await fileToDataUrl(file);
+    await new Promise((r) => setTimeout(r, 700));
 
     const draft: OcrDraft = {
       store: '패밀리마트 나카스점',
@@ -32,10 +32,10 @@ export function ScanPage() {
       payer: '나',
       emoji: '🍱',
       memo: '',
-    }
-    setIsScanning(false)
-    nav(`/journeys/${journeyId}/ocr-preview`, { state: { draft, imageDataUrl } })
-  }
+    };
+    setIsScanning(false);
+    nav(`/journeys/${journeyId}/ocr-preview`, { state: { draft, imageDataUrl } });
+  };
 
   return (
     <div className="fixed inset-0 z-50 mx-auto flex h-dvh w-full max-w-md flex-col bg-slate-900">
@@ -83,9 +83,7 @@ export function ScanPage() {
             <ImagePlus className="size-6" />
           </button>
         </div>
-        <p className="text-xs font-bold text-white/40">
-          촬영하거나, 사진/파일을 첨부해 주세요
-        </p>
+        <p className="text-xs font-bold text-white/40">촬영하거나, 사진/파일을 첨부해 주세요</p>
       </div>
 
       <input
@@ -95,10 +93,10 @@ export function ScanPage() {
         capture="environment"
         className="hidden"
         onChange={(e) => {
-          const f = e.target.files?.[0]
-          if (!f) return
-          void handlePick(f)
-          e.target.value = ''
+          const f = e.target.files?.[0];
+          if (!f) return;
+          void handlePick(f);
+          e.target.value = '';
         }}
       />
       <input
@@ -107,10 +105,10 @@ export function ScanPage() {
         accept="image/*"
         className="hidden"
         onChange={(e) => {
-          const f = e.target.files?.[0]
-          if (!f) return
-          void handlePick(f)
-          e.target.value = ''
+          const f = e.target.files?.[0];
+          if (!f) return;
+          void handlePick(f);
+          e.target.value = '';
         }}
       />
 
@@ -121,6 +119,5 @@ export function ScanPage() {
         }
       `}</style>
     </div>
-  )
+  );
 }
-

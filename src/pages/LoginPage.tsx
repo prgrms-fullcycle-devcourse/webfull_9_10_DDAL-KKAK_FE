@@ -1,11 +1,11 @@
-import { useLocation, useNavigate } from 'react-router-dom'
-import { useAuth } from '../features/auth/AuthProvider'
+import { useLocation, useNavigate } from 'react-router-dom';
+import { useAuth } from '@/features/auth/useAuth';
 
 export function LoginPage() {
-  const nav = useNavigate()
-  const { login } = useAuth()
-  const { state } = useLocation() as { state: { from?: string } | null }
-  const next = state?.from ?? '/'
+  const nav = useNavigate();
+  const { login } = useAuth();
+  const { state } = useLocation() as { state: { from?: string } | null };
+  const next = state?.from ?? '/';
 
   return (
     <div className="min-h-dvh bg-white px-6 pt-24">
@@ -13,9 +13,7 @@ export function LoginPage() {
         <div className="mb-6 grid size-16 place-items-center rounded-3xl bg-slate-50 text-3xl">
           🧾✈️
         </div>
-        <h1 className="text-2xl font-black tracking-tight text-slate-900">
-          트래블 틱
-        </h1>
+        <h1 className="text-2xl font-black tracking-tight text-slate-900">트래블 틱</h1>
         <p className="mt-3 text-sm font-bold leading-relaxed text-slate-400">
           여행은 내가 할게,
           <br />
@@ -26,8 +24,8 @@ export function LoginPage() {
           <button
             type="button"
             onClick={() => {
-              login('영아')
-              nav(next, { replace: true })
+              login('영아');
+              nav(next, { replace: true });
             }}
             className="w-full rounded-2xl bg-yellow-300 py-4 text-sm font-black text-slate-900 active:scale-[0.99]"
           >
@@ -36,8 +34,8 @@ export function LoginPage() {
           <button
             type="button"
             onClick={() => {
-              login('영아')
-              nav(next, { replace: true })
+              login('영아');
+              nav(next, { replace: true });
             }}
             className="w-full rounded-2xl bg-slate-900 py-4 text-sm font-black text-white active:scale-[0.99]"
           >
@@ -50,6 +48,5 @@ export function LoginPage() {
         </p>
       </div>
     </div>
-  )
+  );
 }
-

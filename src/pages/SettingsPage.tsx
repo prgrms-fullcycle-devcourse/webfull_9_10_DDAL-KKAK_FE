@@ -1,12 +1,12 @@
-import { LogOut, Sparkles } from 'lucide-react'
-import { useNavigate } from 'react-router-dom'
-import { BottomNav } from '../components/BottomNav'
-import { TopBar } from '../components/TopBar'
-import { useAuth } from '../features/auth/AuthProvider'
+import { LogOut, Sparkles } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { BottomNav } from '../components/layout/BottomNav';
+import { TopBar } from '../components/layout/TopBar';
+import { useAuth } from '@/features/auth/useAuth';
 
 export function SettingsPage() {
-  const nav = useNavigate()
-  const { logout } = useAuth()
+  const nav = useNavigate();
+  const { logout } = useAuth();
 
   return (
     <div className="min-h-dvh bg-white pb-20">
@@ -30,16 +30,14 @@ export function SettingsPage() {
         <button
           type="button"
           onClick={() => {
-            logout()
-            nav('/login', { replace: true })
+            logout();
+            nav('/login', { replace: true });
           }}
           className="flex w-full items-center justify-between rounded-3xl border border-slate-100 bg-white p-5 text-left shadow-sm active:scale-[0.99]"
         >
           <div>
             <p className="text-sm font-black text-slate-900">로그아웃</p>
-            <p className="mt-1 text-xs font-bold text-slate-400">
-              소셜 로그인 연동 전 임시 버튼
-            </p>
+            <p className="mt-1 text-xs font-bold text-slate-400">소셜 로그인 연동 전 임시 버튼</p>
           </div>
           <LogOut className="size-5 text-slate-300" />
         </button>
@@ -47,6 +45,5 @@ export function SettingsPage() {
 
       <BottomNav />
     </div>
-  )
+  );
 }
-

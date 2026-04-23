@@ -1,34 +1,35 @@
-import { Camera, Plus, User } from 'lucide-react'
-import { useMemo } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
-import { BottomNav } from '../components/BottomNav'
-import { Fab } from '../components/Fab'
-import { getJourneyPhase, getTripStatusLabel } from '../lib/dates'
-import { formatKRW } from '../lib/money'
-import type { Expense, Journey } from '../types'
-import { useAllExpensesQuery, useJourneysQuery } from '../features/journeys/queries'
-import { sumMySpendKRW, sumTotalKRW } from '../features/settlement/calc'
+import { Camera, Plus, User } from 'lucide-react';
+import { useMemo } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { BottomNav } from '../components/layout/BottomNav';
+import { Fab } from '../components/layout/Fab';
+import { getJourneyPhase, getTripStatusLabel } from '../lib/dates';
+import { formatKRW } from '../lib/money';
+import type { Journey } from '@/features/journeys/types';
+import type { Expense } from '@/features/expenses/types';
+import { useAllExpensesQuery, useJourneysQuery } from '../features/journeys/queries';
+import { sumMySpendKRW, sumTotalKRW } from '../features/settlement/calc';
 
 function JourneyCard({
   j,
   expenses,
   onClick,
 }: {
-  j: Journey
-  expenses: Expense[]
-  onClick: () => void
+  j: Journey;
+  expenses: Expense[];
+  onClick: () => void;
 }) {
-  const status = getTripStatusLabel(j.startDate, j.endDate)
-  const tripExpenses = expenses.filter((e) => e.journeyId === j.id)
-  const spentKRW = sumMySpendKRW(j, tripExpenses)
-  const totalReceiptKRW = sumTotalKRW(j, tripExpenses)
+  const status = getTripStatusLabel(j.startDate, j.endDate);
+  const tripExpenses = expenses.filter((e) => e.journeyId === j.id);
+  const spentKRW = sumMySpendKRW(j, tripExpenses);
+  const totalReceiptKRW = sumTotalKRW(j, tripExpenses);
 
   const statusChip =
     status.tone === 'active'
       ? 'bg-blue-50 text-blue-600'
       : status.tone === 'planned'
         ? 'bg-orange-50 text-orange-600'
-        : 'bg-slate-100 text-slate-400'
+        : 'bg-slate-100 text-slate-400';
 
   return (
     <button
@@ -85,31 +86,31 @@ function JourneyCard({
         </div>
       </div>
     </button>
-  )
+  );
 }
 
 export function HomePage() {
-  const nav = useNavigate()
-  const { data: journeys = [] } = useJourneysQuery()
-  const { data: allExpenses = [] } = useAllExpensesQuery()
+  const nav = useNavigate();
+  const { data: journeys = [] } = useJourneysQuery();
+  const { data: allExpenses = [] } = useAllExpensesQuery();
 
   const { ongoing, upcoming, past } = useMemo(() => {
-    const ongoing: Journey[] = []
-    const upcoming: Journey[] = []
-    const past: Journey[] = []
+    const ongoing: Journey[] = [];
+    const upcoming: Journey[] = [];
+    const past: Journey[] = [];
     for (const j of journeys) {
-      const phase = getJourneyPhase(j.startDate, j.endDate)
-      if (phase === 'ongoing') ongoing.push(j)
-      else if (phase === 'upcoming') upcoming.push(j)
-      else past.push(j)
+      const phase = getJourneyPhase(j.startDate, j.endDate);
+      if (phase === 'ongoing') ongoing.push(j);
+      else if (phase === 'upcoming') upcoming.push(j);
+      else past.push(j);
     }
-    upcoming.sort((a, b) => a.startDate.localeCompare(b.startDate))
-    ongoing.sort((a, b) => b.startDate.localeCompare(a.startDate))
-    past.sort((a, b) => b.endDate.localeCompare(a.endDate))
-    return { ongoing, upcoming, past }
-  }, [journeys])
+    upcoming.sort((a, b) => a.startDate.localeCompare(b.startDate));
+    ongoing.sort((a, b) => b.startDate.localeCompare(a.startDate));
+    past.sort((a, b) => b.endDate.localeCompare(a.endDate));
+    return { ongoing, upcoming, past };
+  }, [journeys]);
 
-  const scanTarget = ongoing[0] ?? upcoming[0] ?? null
+  const scanTarget = ongoing[0] ?? upcoming[0] ?? null;
 
   const Section = ({
     title,
@@ -117,10 +118,10 @@ export function HomePage() {
     items,
     emptyText,
   }: {
-    title: string
-    subtitle: string
-    items: Journey[]
-    emptyText: string
+    title: string;
+    subtitle: string;
+    items: Journey[];
+    emptyText: string;
   }) => (
     <section className="mb-10">
       <div className="mb-3">
@@ -144,7 +145,7 @@ export function HomePage() {
         </div>
       )}
     </section>
-  )
+  );
 
   return (
     <div className="relative min-h-dvh bg-slate-50 pb-20">
@@ -162,10 +163,7 @@ export function HomePage() {
       <main className="px-6 pb-6 pt-8">
         <div className="mb-6 flex items-center justify-between">
           <h2 className="text-lg font-black tracking-tight">나의 여행</h2>
-          <Link
-            to="/journeys/new"
-            className="flex items-center text-sm font-black text-blue-600"
-          >
+          <Link to="/journeys/new" className="flex items-center text-sm font-black text-blue-600">
             <Plus className="mr-1 size-4" /> 새 여행
           </Link>
         </div>
@@ -191,16 +189,12 @@ export function HomePage() {
       </main>
 
       {scanTarget ? (
-        <Fab
-          label="영수증 스캔"
-          onClick={() => nav(`/journeys/${scanTarget.id}/scan`)}
-        >
+        <Fab label="영수증 스캔" onClick={() => nav(`/journeys/${scanTarget.id}/scan`)}>
           <Camera className="size-8" />
         </Fab>
       ) : null}
 
       <BottomNav />
-
     </div>
-  )
+  );
 }

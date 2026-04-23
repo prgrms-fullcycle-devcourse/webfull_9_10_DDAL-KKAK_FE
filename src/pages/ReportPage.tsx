@@ -1,50 +1,50 @@
-import html2canvas from 'html2canvas'
-import { useRef, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
-import { TopBar } from '../components/TopBar'
-import { useExpensesQuery, useJourneyQuery } from '../features/journeys/queries'
-import { calcSettlement, ledgerSelfName } from '../features/settlement/calc'
-import { formatKRW, formatLocal } from '../lib/money'
+import html2canvas from 'html2canvas';
+import { useRef, useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
+import { TopBar } from '../components/layout/TopBar';
+import { useExpensesQuery, useJourneyQuery } from '../features/journeys/queries';
+import { calcSettlement, ledgerSelfName } from '../features/settlement/calc';
+import { formatKRW, formatLocal } from '../lib/money';
 
 export function ReportPage() {
-  const nav = useNavigate()
-  const { journeyId } = useParams()
-  const { data: journey } = useJourneyQuery(journeyId)
-  const { data: expenses = [] } = useExpensesQuery(journeyId)
-  const reportRef = useRef<HTMLDivElement | null>(null)
-  const [isCapturing, setIsCapturing] = useState(false)
-  const [showBasis, setShowBasis] = useState(false)
-  const [basisPerson, setBasisPerson] = useState<string | null>(null)
+  const nav = useNavigate();
+  const { journeyId } = useParams();
+  const { data: journey } = useJourneyQuery(journeyId);
+  const { data: expenses = [] } = useExpensesQuery(journeyId);
+  const reportRef = useRef<HTMLDivElement | null>(null);
+  const [isCapturing, setIsCapturing] = useState(false);
+  const [showBasis, setShowBasis] = useState(false);
+  const [basisPerson, setBasisPerson] = useState<string | null>(null);
 
-  if (!journey) return null
+  if (!journey) return null;
 
-  const data = calcSettlement(journey, expenses)
-  const people = journey.participants.length ? journey.participants : ['나']
-  const selfName = ledgerSelfName(journey)
-  const selected = basisPerson ?? people[0]
+  const data = calcSettlement(journey, expenses);
+  const people = journey.participants.length ? journey.participants : ['나'];
+  const selfName = ledgerSelfName(journey);
+  const selected = basisPerson ?? people[0];
 
-  const toMe = data.transfers.filter((t) => t.to === selfName)
-  const fromMe = data.transfers.filter((t) => t.from === selfName)
-  const toMeTotal = toMe.reduce((a, t) => a + t.amountLocal, 0)
-  const fromMeTotal = fromMe.reduce((a, t) => a + t.amountLocal, 0)
+  const toMe = data.transfers.filter((t) => t.to === selfName);
+  const fromMe = data.transfers.filter((t) => t.from === selfName);
+  const toMeTotal = toMe.reduce((a, t) => a + t.amountLocal, 0);
+  const fromMeTotal = fromMe.reduce((a, t) => a + t.amountLocal, 0);
 
   const handleCapture = async () => {
-    if (!reportRef.current) return
-    setIsCapturing(true)
+    if (!reportRef.current) return;
+    setIsCapturing(true);
     try {
       const canvas = await html2canvas(reportRef.current, {
         backgroundColor: '#F8F9FA',
         scale: 2,
-      })
-      const url = canvas.toDataURL('image/png')
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `travel-tick-report-${journey.id}.png`
-      a.click()
+      });
+      const url = canvas.toDataURL('image/png');
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `travel-tick-report-${journey.id}.png`;
+      a.click();
     } finally {
-      setIsCapturing(false)
+      setIsCapturing(false);
     }
-  }
+  };
 
   return (
     <div className="min-h-dvh bg-slate-50">
@@ -53,9 +53,7 @@ export function ReportPage() {
       <main className="px-6 pb-10">
         <div ref={reportRef} className="space-y-6 pb-6 pt-4">
           <section className="rounded-[40px] border border-slate-100 bg-white p-8 text-center shadow-sm">
-            <p className="mb-2 text-xs font-black uppercase text-slate-400">
-              Live Settlement
-            </p>
+            <p className="mb-2 text-xs font-black uppercase text-slate-400">Live Settlement</p>
             <h3 className="mb-1 text-3xl font-black tracking-tight text-slate-900">
               누가 누구에게 얼마를?
             </h3>
@@ -114,9 +112,7 @@ export function ReportPage() {
                       ))}
                     </div>
                   ) : (
-                    <p className="mt-2 text-[11px] font-bold text-slate-400">
-                      받을 송금이 없어요.
-                    </p>
+                    <p className="mt-2 text-[11px] font-bold text-slate-400">받을 송금이 없어요.</p>
                   )}
                 </div>
 
@@ -141,9 +137,7 @@ export function ReportPage() {
                       ))}
                     </div>
                   ) : (
-                    <p className="mt-2 text-[11px] font-bold text-slate-400">
-                      줄 송금이 없어요.
-                    </p>
+                    <p className="mt-2 text-[11px] font-bold text-slate-400">줄 송금이 없어요.</p>
                   )}
                 </div>
               </div>
@@ -188,16 +182,14 @@ export function ReportPage() {
                         const splitPeople =
                           e.type === 'shared'
                             ? (e.splitWith?.filter((x) => people.includes(x)) ?? people)
-                            : []
+                            : [];
                         const n =
                           e.type === 'shared'
                             ? Math.max(
-                                splitPeople.length ||
-                                  e.splitAmong ||
-                                  Math.max(people.length, 1),
+                                splitPeople.length || e.splitAmong || Math.max(people.length, 1),
                                 1,
                               )
-                            : 1
+                            : 1;
                         const myShare =
                           e.type === 'private'
                             ? e.payer === selected
@@ -205,9 +197,9 @@ export function ReportPage() {
                               : 0
                             : splitPeople.includes(selected)
                               ? e.amountLocal / n
-                              : 0
+                              : 0;
 
-                        return { e, myShare, splitPeople, n }
+                        return { e, myShare, splitPeople, n };
                       })
                       .filter((x) => x.myShare > 0)
                       .map(({ e, myShare, splitPeople, n }) => (
@@ -269,6 +261,5 @@ export function ReportPage() {
         </button>
       </main>
     </div>
-  )
+  );
 }
-

@@ -1,13 +1,13 @@
-import type { ReactNode } from 'react'
+import type { ReactNode } from 'react';
 
 export function Fab({
   onClick,
   children,
   label,
 }: {
-  onClick: () => void
-  children: ReactNode
-  label: string
+  onClick: () => void;
+  children: ReactNode;
+  label: string;
 }) {
   return (
     <div className="fixed bottom-24 right-6 z-40 mx-auto w-full max-w-md">
@@ -22,6 +22,5 @@ export function Fab({
         </button>
       </div>
     </div>
-  )
+  );
 }
-

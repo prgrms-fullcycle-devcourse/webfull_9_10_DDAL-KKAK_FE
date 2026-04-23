@@ -1,4 +1,4 @@
-import type { Expense, Journey } from '../types'
+import type { Expense, Journey } from '../types/types';
 
 export const MOCK_JOURNEYS: Journey[] = [
   {
@@ -14,7 +14,7 @@ export const MOCK_JOURNEYS: Journey[] = [
     participants: ['나', '지수', '민호'],
     selfParticipant: '나',
   },
-]
+];
 
 export const MOCK_EXPENSES: Expense[] = [
   {
@@ -60,5 +60,4 @@ export const MOCK_EXPENSES: Expense[] = [
     emoji: '🎁',
     memo: '선물 쇼핑 완료',
   },
-]
-
+];

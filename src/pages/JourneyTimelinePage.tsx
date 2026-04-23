@@ -1,15 +1,9 @@
-import {
-  BarChart3,
-  Camera,
-  Clock,
-  Edit2,
-  User as UserIcon,
-} from 'lucide-react'
-import { useMemo } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
-import { Fab } from '../components/Fab'
-import { TopBar } from '../components/TopBar'
-import { useExpensesQuery, useJourneyQuery } from '../features/journeys/queries'
+import { BarChart3, Camera, Clock, Edit2, User as UserIcon } from 'lucide-react';
+import { useMemo } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
+import { Fab } from '../components/layout/Fab';
+import { TopBar } from '../components/layout/TopBar';
+import { useExpensesQuery, useJourneyQuery } from '../features/journeys/queries';
 import {
   expenseMyShareLocal,
   ledgerSelfName,
@@ -17,36 +11,36 @@ import {
   sumMySpendLocal,
   sumTotalKRW,
   sumTotalLocal,
-} from '../features/settlement/calc'
-import { formatKRW, formatLocal } from '../lib/money'
+} from '../features/settlement/calc';
+import { formatKRW, formatLocal } from '../lib/money';
 
 export function JourneyTimelinePage() {
-  const nav = useNavigate()
-  const { journeyId } = useParams()
+  const nav = useNavigate();
+  const { journeyId } = useParams();
 
-  const { data: journey } = useJourneyQuery(journeyId)
-  const { data: expenses = [] } = useExpensesQuery(journeyId)
+  const { data: journey } = useJourneyQuery(journeyId);
+  const { data: expenses = [] } = useExpensesQuery(journeyId);
 
   const grouped = useMemo(() => {
-    const by: Record<string, typeof expenses> = {}
+    const by: Record<string, typeof expenses> = {};
     for (const e of expenses) {
-      ;(by[e.date] ??= []).push(e)
+      (by[e.date] ??= []).push(e);
     }
     return Object.entries(by)
       .sort(([a], [b]) => (a < b ? 1 : -1))
       .map(([date, items]) => ({
         date,
         items: [...items].sort((a, b) => (a.time < b.time ? 1 : -1)),
-      }))
-  }, [expenses])
+      }));
+  }, [expenses]);
 
-  if (!journey) return null
+  if (!journey) return null;
 
-  const totalLocal = sumTotalLocal(expenses)
-  const totalKRW = sumTotalKRW(journey, expenses)
-  const mySpendLocal = sumMySpendLocal(journey, expenses)
-  const mySpendKRW = sumMySpendKRW(journey, expenses)
-  const selfName = ledgerSelfName(journey)
+  const totalLocal = sumTotalLocal(expenses);
+  const totalKRW = sumTotalKRW(journey, expenses);
+  const mySpendLocal = sumMySpendLocal(journey, expenses);
+  const mySpendKRW = sumMySpendKRW(journey, expenses);
+  const selfName = ledgerSelfName(journey);
 
   return (
     <div className="relative min-h-dvh bg-white pb-20">
@@ -108,8 +102,8 @@ export function JourneyTimelinePage() {
               「{selfName}」일 때만 포함
             </p>
             <p className="text-[10px] font-bold text-white/30">
-              영수증 전체 합(참고): {formatKRW(totalKRW)}원 /{' '}
-              {formatLocal(totalLocal)} {journey.currency}
+              영수증 전체 합(참고): {formatKRW(totalKRW)}원 / {formatLocal(totalLocal)}{' '}
+              {journey.currency}
             </p>
 
             <div className="mt-5 rounded-2xl border border-white/10 bg-white/5 p-4">
@@ -141,68 +135,66 @@ export function JourneyTimelinePage() {
 
               <div className="space-y-10">
                 {items.map((e) => {
-                  const myShare = expenseMyShareLocal(journey, e)
+                  const myShare = expenseMyShareLocal(journey, e);
                   const splitN =
                     e.type === 'shared'
-                      ? (typeof e.splitAmong === 'number' && e.splitAmong >= 1
-                          ? e.splitAmong
-                          : Math.max(journey.participants.length, 1))
-                      : null
+                      ? typeof e.splitAmong === 'number' && e.splitAmong >= 1
+                        ? e.splitAmong
+                        : Math.max(journey.participants.length, 1)
+                      : null;
                   return (
-                  <div key={e.id} className="group">
-                    <div className="mb-2 flex items-start justify-between">
-                      <div className="flex items-center gap-3">
-                        <span className="text-3xl drop-shadow-sm">{e.emoji}</span>
-                        <div>
-                          <div className="mb-1 flex items-center gap-2">
-                            <h4 className="text-base font-black leading-none text-slate-900">
-                              {e.store}
-                            </h4>
-                            <span
-                              className={`rounded px-1.5 py-0.5 text-[8px] font-black tracking-tighter ${e.type === 'shared' ? 'bg-orange-100 text-orange-600' : 'bg-slate-100 text-slate-500'}`}
-                            >
-                              {e.type === 'shared'
-                                ? `공동${splitN != null ? ` · ${splitN}명 1/n` : ''}`
-                                : '개인'}
-                            </span>
-                            <span className="rounded bg-slate-50 px-1.5 py-0.5 text-[8px] font-black tracking-tighter text-slate-400">
-                              {(e.method ?? 'card') === 'cash' ? '현금' : '카드'}
-                            </span>
+                    <div key={e.id} className="group">
+                      <div className="mb-2 flex items-start justify-between">
+                        <div className="flex items-center gap-3">
+                          <span className="text-3xl drop-shadow-sm">{e.emoji}</span>
+                          <div>
+                            <div className="mb-1 flex items-center gap-2">
+                              <h4 className="text-base font-black leading-none text-slate-900">
+                                {e.store}
+                              </h4>
+                              <span
+                                className={`rounded px-1.5 py-0.5 text-[8px] font-black tracking-tighter ${e.type === 'shared' ? 'bg-orange-100 text-orange-600' : 'bg-slate-100 text-slate-500'}`}
+                              >
+                                {e.type === 'shared'
+                                  ? `공동${splitN != null ? ` · ${splitN}명 1/n` : ''}`
+                                  : '개인'}
+                              </span>
+                              <span className="rounded bg-slate-50 px-1.5 py-0.5 text-[8px] font-black tracking-tighter text-slate-400">
+                                {(e.method ?? 'card') === 'cash' ? '현금' : '카드'}
+                              </span>
+                            </div>
+                            <p className="flex items-center text-[10px] font-bold uppercase tracking-tighter text-slate-300">
+                              <Clock className="mr-1 size-3" /> {e.time} •{' '}
+                              <UserIcon className="mx-1 size-3" /> 결제자: {e.payer}
+                            </p>
                           </div>
-                          <p className="flex items-center text-[10px] font-bold uppercase tracking-tighter text-slate-300">
-                            <Clock className="mr-1 size-3" /> {e.time} •{' '}
-                            <UserIcon className="mx-1 size-3" /> 결제자: {e.payer}
+                        </div>
+                        <div className="text-right">
+                          <p className="text-lg font-black leading-none tracking-tight text-slate-900">
+                            {formatLocal(e.amountLocal)}
+                            <span className="ml-0.5 text-xs font-bold">{journey.currency}</span>
                           </p>
+                          <p className="mt-1 text-[10px] font-bold tracking-tighter text-slate-300">
+                            약 {formatKRW(e.amountLocal * journey.rate)}원
+                          </p>
+                          {e.type === 'shared' ? (
+                            <p className="mt-1 text-[10px] font-black text-blue-600">
+                              내 몫 {formatLocal(myShare)} {journey.currency} (약{' '}
+                              {formatKRW(myShare * journey.rate)}원)
+                            </p>
+                          ) : null}
                         </div>
                       </div>
-                      <div className="text-right">
-                        <p className="text-lg font-black leading-none tracking-tight text-slate-900">
-                          {formatLocal(e.amountLocal)}
-                          <span className="ml-0.5 text-xs font-bold">
-                            {journey.currency}
-                          </span>
-                        </p>
-                        <p className="mt-1 text-[10px] font-bold tracking-tighter text-slate-300">
-                          약 {formatKRW(e.amountLocal * journey.rate)}원
-                        </p>
-                        {e.type === 'shared' ? (
-                          <p className="mt-1 text-[10px] font-black text-blue-600">
-                            내 몫 {formatLocal(myShare)} {journey.currency} (약{' '}
-                            {formatKRW(myShare * journey.rate)}원)
-                          </p>
-                        ) : null}
-                      </div>
-                    </div>
 
-                    {e.memo ? (
-                      <div className="ml-11 rounded-2xl border-l-4 border-blue-100 bg-slate-50 px-4 py-3">
-                        <p className="text-sm font-medium leading-relaxed tracking-tight text-slate-500">
-                          "{e.memo}"
-                        </p>
-                      </div>
-                    ) : null}
-                  </div>
-                  )
+                      {e.memo ? (
+                        <div className="ml-11 rounded-2xl border-l-4 border-blue-100 bg-slate-50 px-4 py-3">
+                          <p className="text-sm font-medium leading-relaxed tracking-tight text-slate-500">
+                            "{e.memo}"
+                          </p>
+                        </div>
+                      ) : null}
+                    </div>
+                  );
                 })}
               </div>
             </div>
@@ -210,13 +202,9 @@ export function JourneyTimelinePage() {
         </section>
       </main>
 
-      <Fab
-        label="영수증 스캔"
-        onClick={() => nav(`/journeys/${journey.id}/scan`)}
-      >
+      <Fab label="영수증 스캔" onClick={() => nav(`/journeys/${journey.id}/scan`)}>
         <Camera className="size-8" />
       </Fab>
     </div>
-  )
+  );
 }
-

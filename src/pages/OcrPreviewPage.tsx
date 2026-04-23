@@ -1,34 +1,32 @@
-import { RotateCcw, RotateCw, Smile, User, Users } from 'lucide-react'
-import { useMemo, useState } from 'react'
-import { useLocation, useNavigate, useParams } from 'react-router-dom'
-import { TopBar } from '../components/TopBar'
-import { useJourneyQuery } from '../features/journeys/queries'
-import { formatKRW, formatLocal } from '../lib/money'
-import { ledgerSelfName } from '../features/settlement/calc'
-import { rotateDataUrl } from '../lib/image'
-import type { OcrDraft } from '../types'
-import { useAddExpenseMutation } from '../features/expenses/queries'
+import { RotateCcw, RotateCw, Smile, User, Users } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
+import { TopBar } from '../components/layout/TopBar';
+import { useJourneyQuery } from '../features/journeys/queries';
+import { formatKRW, formatLocal } from '../lib/money';
+import { ledgerSelfName } from '../features/settlement/calc';
+import { rotateDataUrl } from '../lib/image';
+import type { OcrDraft } from '@/features/ocr/types';
+import { useAddExpenseMutation } from '../features/expenses/queries';
 
-type LocationState = { draft?: OcrDraft; imageDataUrl?: string }
+type LocationState = { draft?: OcrDraft; imageDataUrl?: string };
 
 export function OcrPreviewPage() {
-  const nav = useNavigate()
-  const { journeyId } = useParams()
-  const { state } = useLocation() as { state: LocationState | null }
-  const { data: journey } = useJourneyQuery(journeyId)
-  const addExpense = useAddExpenseMutation()
+  const nav = useNavigate();
+  const { journeyId } = useParams();
+  const { state } = useLocation() as { state: LocationState | null };
+  const { data: journey } = useJourneyQuery(journeyId);
+  const addExpense = useAddExpenseMutation();
 
   const initialDraft = useMemo<OcrDraft | null>(() => {
-    return state?.draft ?? null
-  }, [state])
+    return state?.draft ?? null;
+  }, [state]);
 
-  const [draft, setDraft] = useState<OcrDraft | null>(initialDraft)
-  const [imageDataUrl, setImageDataUrl] = useState<string | null>(
-    state?.imageDataUrl ?? null,
-  )
-  const [isRotating, setIsRotating] = useState(false)
+  const [draft, setDraft] = useState<OcrDraft | null>(initialDraft);
+  const [imageDataUrl, setImageDataUrl] = useState<string | null>(state?.imageDataUrl ?? null);
+  const [isRotating, setIsRotating] = useState(false);
 
-  if (!journey) return null
+  if (!journey) return null;
 
   if (!draft) {
     return (
@@ -47,18 +45,18 @@ export function OcrPreviewPage() {
           </button>
         </div>
       </div>
-    )
+    );
   }
 
-  const defaultSplitWith = journey.participants.length ? journey.participants : ['나']
+  const defaultSplitWith = journey.participants.length ? journey.participants : ['나'];
 
   const onPost = async () => {
-    if (!journeyId || !draft) return
-    const now = new Date()
-    const date = now.toISOString().slice(0, 10)
+    if (!journeyId || !draft) return;
+    const now = new Date();
+    const date = now.toISOString().slice(0, 10);
     const time =
       draft.time ||
-      now.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false })
+      now.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false });
 
     await addExpense.mutateAsync({
       id: `e-${Date.now()}`,
@@ -67,12 +65,9 @@ export function OcrPreviewPage() {
       amountLocal: Number(draft.amountLocal) || 0,
       splitAmong:
         draft.type === 'shared'
-          ? draft.splitAmong ?? Math.max(journey.participants.length, 1)
+          ? (draft.splitAmong ?? Math.max(journey.participants.length, 1))
           : undefined,
-      splitWith:
-        draft.type === 'shared'
-          ? (draft.splitWith ?? defaultSplitWith)
-          : undefined,
+      splitWith: draft.type === 'shared' ? (draft.splitWith ?? defaultSplitWith) : undefined,
       method: draft.method ?? 'card',
       category: draft.category || '기타',
       time,
@@ -81,10 +76,10 @@ export function OcrPreviewPage() {
       payer: draft.payer,
       emoji: draft.emoji || '🧾',
       memo: draft.memo?.trim() || undefined,
-    })
+    });
 
-    nav(`/journeys/${journeyId}`, { replace: true })
-  }
+    nav(`/journeys/${journeyId}`, { replace: true });
+  };
 
   return (
     <div className="min-h-dvh bg-slate-50">
@@ -102,11 +97,11 @@ export function OcrPreviewPage() {
                   type="button"
                   disabled={isRotating}
                   onClick={async () => {
-                    setIsRotating(true)
+                    setIsRotating(true);
                     try {
-                      setImageDataUrl(await rotateDataUrl(imageDataUrl, -90))
+                      setImageDataUrl(await rotateDataUrl(imageDataUrl, -90));
                     } finally {
-                      setIsRotating(false)
+                      setIsRotating(false);
                     }
                   }}
                   className="grid size-9 place-items-center rounded-xl bg-slate-50 text-slate-500 disabled:opacity-60"
@@ -118,11 +113,11 @@ export function OcrPreviewPage() {
                   type="button"
                   disabled={isRotating}
                   onClick={async () => {
-                    setIsRotating(true)
+                    setIsRotating(true);
                     try {
-                      setImageDataUrl(await rotateDataUrl(imageDataUrl, 90))
+                      setImageDataUrl(await rotateDataUrl(imageDataUrl, 90));
                     } finally {
-                      setIsRotating(false)
+                      setIsRotating(false);
                     }
                   }}
                   className="grid size-9 place-items-center rounded-xl bg-slate-50 text-slate-500 disabled:opacity-60"
@@ -134,11 +129,11 @@ export function OcrPreviewPage() {
                   type="button"
                   disabled={isRotating}
                   onClick={async () => {
-                    setIsRotating(true)
+                    setIsRotating(true);
                     try {
-                      setImageDataUrl(await rotateDataUrl(imageDataUrl, -5))
+                      setImageDataUrl(await rotateDataUrl(imageDataUrl, -5));
                     } finally {
-                      setIsRotating(false)
+                      setIsRotating(false);
                     }
                   }}
                   className="rounded-xl bg-slate-50 px-3 py-2 text-[10px] font-black text-slate-500 disabled:opacity-60"
@@ -149,11 +144,11 @@ export function OcrPreviewPage() {
                   type="button"
                   disabled={isRotating}
                   onClick={async () => {
-                    setIsRotating(true)
+                    setIsRotating(true);
                     try {
-                      setImageDataUrl(await rotateDataUrl(imageDataUrl, 5))
+                      setImageDataUrl(await rotateDataUrl(imageDataUrl, 5));
                     } finally {
-                      setIsRotating(false)
+                      setIsRotating(false);
                     }
                   }}
                   className="rounded-xl bg-slate-50 px-3 py-2 text-[10px] font-black text-slate-500 disabled:opacity-60"
@@ -164,11 +159,7 @@ export function OcrPreviewPage() {
             </div>
 
             <div className="mt-3 overflow-hidden rounded-2xl bg-slate-50">
-              <img
-                src={imageDataUrl}
-                alt="영수증"
-                className="h-56 w-full object-contain"
-              />
+              <img src={imageDataUrl} alt="영수증" className="h-56 w-full object-contain" />
             </div>
 
             <p className="mt-3 text-[11px] font-bold text-slate-400">
@@ -200,9 +191,7 @@ export function OcrPreviewPage() {
                 <input
                   type="number"
                   value={draft.amountLocal}
-                  onChange={(e) =>
-                    setDraft({ ...draft, amountLocal: Number(e.target.value) })
-                  }
+                  onChange={(e) => setDraft({ ...draft, amountLocal: Number(e.target.value) })}
                   className="w-32 bg-transparent text-right text-3xl font-black outline-none"
                 />
               </div>
@@ -228,10 +217,8 @@ export function OcrPreviewPage() {
                   setDraft({
                     ...draft,
                     type: 'shared',
-                    splitAmong:
-                      draft.splitAmong ?? Math.max(journey.participants.length, 1),
-                    splitWith:
-                      draft.splitWith ?? defaultSplitWith,
+                    splitAmong: draft.splitAmong ?? Math.max(journey.participants.length, 1),
+                    splitWith: draft.splitWith ?? defaultSplitWith,
                   })
                 }
                 className={`flex-1 rounded-lg py-3 text-sm font-black transition-all ${draft.type === 'shared' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400'}`}
@@ -255,22 +242,20 @@ export function OcrPreviewPage() {
               </label>
               <div className="flex flex-wrap gap-2 rounded-2xl border border-slate-100 bg-slate-50 p-4">
                 {defaultSplitWith.map((p) => {
-                  const current = draft.splitWith ?? defaultSplitWith
-                  const selected = current.includes(p)
+                  const current = draft.splitWith ?? defaultSplitWith;
+                  const selected = current.includes(p);
                   return (
                     <button
                       key={p}
                       type="button"
                       onClick={() => {
-                        const next = selected
-                          ? current.filter((x) => x !== p)
-                          : [...current, p]
-                        if (next.length === 0) return
+                        const next = selected ? current.filter((x) => x !== p) : [...current, p];
+                        if (next.length === 0) return;
                         setDraft({
                           ...draft,
                           splitAmong: next.length,
                           splitWith: next,
-                        })
+                        });
                       }}
                       className={`rounded-full px-3 py-2 text-[11px] font-black transition-all ${
                         selected ? 'bg-blue-600 text-white' : 'bg-white text-slate-600'
@@ -279,7 +264,7 @@ export function OcrPreviewPage() {
                     >
                       {p}
                     </button>
-                  )
+                  );
                 })}
               </div>
             </div>
@@ -293,7 +278,7 @@ export function OcrPreviewPage() {
               value={
                 journey.participants.includes(draft.payer)
                   ? draft.payer
-                  : journey.participants[0] ?? '나'
+                  : (journey.participants[0] ?? '나')
               }
               onChange={(e) => setDraft({ ...draft, payer: e.target.value })}
               className="w-full rounded-2xl border border-slate-100 bg-slate-50 p-4 text-sm font-black outline-none"
@@ -356,8 +341,8 @@ export function OcrPreviewPage() {
               미리보기
             </p>
             <p className="mt-2 text-sm font-black text-slate-900">
-              {draft.emoji} {draft.store} • {formatLocal(draft.amountLocal)}{' '}
-              {journey.currency} (약 {formatKRW(draft.amountLocal * journey.rate)}원)
+              {draft.emoji} {draft.store} • {formatLocal(draft.amountLocal)} {journey.currency} (약{' '}
+              {formatKRW(draft.amountLocal * journey.rate)}원)
             </p>
             <p className="mt-1 text-[10px] font-bold text-slate-400">
               결제 수단: {(draft.method ?? 'card') === 'cash' ? '현금' : '카드'}
@@ -396,6 +381,5 @@ export function OcrPreviewPage() {
         </button>
       </div>
     </div>
-  )
+  );
 }
-

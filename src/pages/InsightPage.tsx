@@ -1,44 +1,46 @@
-import { useMemo } from 'react'
-import { useParams } from 'react-router-dom'
-import { TopBar } from '../components/TopBar'
-import { useExpensesQuery, useJourneyQuery } from '../features/journeys/queries'
+import { useMemo } from 'react';
+import { useParams } from 'react-router-dom';
+import { TopBar } from '../components/layout/TopBar';
+import { useExpensesQuery, useJourneyQuery } from '../features/journeys/queries';
 
 function hourOf(time: string) {
-  const h = Number(time.split(':')[0] ?? 0)
-  return Number.isFinite(h) ? h : 0
+  const h = Number(time.split(':')[0] ?? 0);
+  return Number.isFinite(h) ? h : 0;
 }
 
 export function InsightPage() {
-  const { journeyId } = useParams()
-  const { data: journey } = useJourneyQuery(journeyId)
-  const { data: expenses = [] } = useExpensesQuery(journeyId)
+  const { journeyId } = useParams();
+  const { data: journey } = useJourneyQuery(journeyId);
+  const { data: expenses = [] } = useExpensesQuery(journeyId);
 
   const summary = useMemo(() => {
-    if (!expenses.length) return null
+    if (!expenses.length) return null;
 
-    const byCategory: Record<string, number> = {}
-    let lateNight = 0
+    const byCategory: Record<string, number> = {};
+    let lateNight = 0;
     for (const e of expenses) {
-      byCategory[e.category] = (byCategory[e.category] ?? 0) + e.amountLocal
-      if (hourOf(e.time) >= 22) lateNight += 1
+      byCategory[e.category] = (byCategory[e.category] ?? 0) + e.amountLocal;
+      if (hourOf(e.time) >= 22) lateNight += 1;
     }
 
-    const top = Object.entries(byCategory).sort((a, b) => b[1] - a[1])[0]
-    const topCat = top?.[0] ?? '기타'
-    const topRatio = top ? Math.round((top[1] / Object.values(byCategory).reduce((a, v) => a + v, 0)) * 100) : 0
-    const lateRatio = Math.round((lateNight / Math.max(expenses.length, 1)) * 100)
+    const top = Object.entries(byCategory).sort((a, b) => b[1] - a[1])[0];
+    const topCat = top?.[0] ?? '기타';
+    const topRatio = top
+      ? Math.round((top[1] / Object.values(byCategory).reduce((a, v) => a + v, 0)) * 100)
+      : 0;
+    const lateRatio = Math.round((lateNight / Math.max(expenses.length, 1)) * 100);
 
     const title =
       topCat === '식비'
         ? '밤을 잊은 미식가'
         : topCat === '쇼핑'
           ? '살까 말까? 사버린 타입'
-          : '기록하는 여행자'
+          : '기록하는 여행자';
 
-    return { title, topCat, topRatio, lateRatio }
-  }, [expenses])
+    return { title, topCat, topRatio, lateRatio };
+  }, [expenses]);
 
-  if (!journey) return null
+  if (!journey) return null;
 
   return (
     <div className="min-h-dvh bg-slate-50 pb-10">
@@ -60,8 +62,9 @@ export function InsightPage() {
               {summary.lateRatio >= 35 ? (
                 <>
                   {' '}
-                  또 밤 10시 이후 지출이 <span className="font-black text-blue-600">{summary.lateRatio}%</span>
-                  로 많은 편이에요.
+                  또 밤 10시 이후 지출이{' '}
+                  <span className="font-black text-blue-600">{summary.lateRatio}%</span>로 많은
+                  편이에요.
                 </>
               ) : null}
             </p>
@@ -95,6 +98,5 @@ export function InsightPage() {
         </section>
       </main>
     </div>
-  )
+  );
 }
-
