@@ -114,7 +114,7 @@
 
 본 프로젝트는 기능 단위로 코드를 분리하는 **feature-based architecture**를 기반으로 구성했습니다.
 
-````bash
+```bash
 src/
 ├── assets/             # 이미지, 아이콘 등 정적 에셋
 ├── components/
@@ -137,84 +137,85 @@ src/
 ├── App.tsx             # 루트 컴포넌트
 ├── main.tsx            # 앱 진입점
 
-```md
+md
 👉 공통 UI(`components`), 기능 로직(`features`), 페이지(`pages`)를 분리하여
 확장성과 유지보수성을 고려한 구조로 설계했습니다.
+```
 
+### 📊 AI 소비 리포트🔄 사용자 흐름
 
+- 로그인 (소셜 로그인)
+- 여행 생성 (여행지, 인원, 환율 설정)
+- 영수증 촬영 → OCR 자동 입력
+- 개인 / 공동 지출 분류
+- 실시간 지출 및 정산 상태 확인
+- 여행 종료 후 최종 정산 및 리포트 확인
 
-🔄 사용자 흐름
-로그인 (소셜 로그인)
-여행 생성 (여행지, 인원, 환율 설정)
-영수증 촬영 → OCR 자동 입력
-개인 / 공동 지출 분류
-실시간 지출 및 정산 상태 확인
-여행 종료 후 최종 정산 및 리포트 확인
+---
 
+### ⚙️ 개발 포인트
 
-⚙️ 개발 포인트
 1. OCR 결과를 바로 저장하지 않는 UX 설계
-OCR의 오인식을 고려하여
-사용자가 빠르게 검수할 수 있는 흐름을 설계했습니다.
+   OCR의 오인식을 고려하여
+   사용자가 빠르게 검수할 수 있는 흐름을 설계했습니다.
 
 2. 정산 로직 구조화
-공동 지출을 기반으로 개인별 금액 계산
-최소 송금 횟수로 최적화된 정산 결과 제공
+   공동 지출을 기반으로 개인별 금액 계산
+   최소 송금 횟수로 최적화된 정산 결과 제공
 
 3. PWA 기반 앱 경험 제공
-웹 환경에서도 앱처럼 사용할 수 있도록 설계
-향후 오프라인 기록 기능 확장 고려
+   웹 환경에서도 앱처럼 사용할 수 있도록 설계
+   향후 오프라인 기록 기능 확장 고려
 
+---
 
-🔗 연동 예정 백엔드
-Node.js (Express)
-PostgreSQL (Supabase)
-Prisma
-Naver Clova OCR
-GPT-4o (AI 리포트)
-Google Maps API (루트맵 기능)
+### 🔗 연동 예정 백엔드
 
+- Node.js (Express)
+- PostgreSQL (Supabase)
+- Prisma
+- Naver Clova OCR
+- GPT-4o (AI 리포트)
+- Google Maps API (루트맵 기능)
 
-🚀 시작하기
-git clone <repository-url>
-cd travel-tick
-npm install
-npm run dev
+---
 
+### 🚀 시작하기
 
-📜 스크립트
-npm run dev
-npm run build
-npm run preview
-npm run lint
-npm run lint:fix
-npm run format
+- git clone <repository-url>
+- cd travel-tick
+- npm install
+- npm run dev
 
+---
 
-📌 향후 개선 예정
-IndexedDB 기반 오프라인 기록 기능
-지도 기반 여행 동선 시각화
-OCR 정확도 개선 및 후처리 로직 추가
-AI 리포트 고도화
+### 📜 스크립트
 
+- npm run dev
+- npm run build
+- npm run preview
+- npm run lint
+- npm run lint:fix
+- npm run format
 
-📦 배포
-Vercel 배포 예정
+---
 
+### 📌 향후 개선 예정
 
+- IndexedDB 기반 오프라인 기록 기능
+- 지도 기반 여행 동선 시각화
+- OCR 정확도 개선 및 후처리 로직 추가
+- AI 리포트 고도화
 
-# Travel-Tick (Frontend)
+---
 
-`Vite + React + TypeScript + TailwindCSS(v4) + TanStack Query + html2canvas` 기반 프론트 초기 작업본입니다.
+### 📦 배포
 
-## 실행
+- Vercel 배포 예정
 
-```bash
-npm install
-npm run dev
-````
+---
 
-## 현재 포함된 화면(초기 스캐폴딩)
+### 현재 포함된 화면(초기 스캐폴딩)
 
 - `/login`: 로그인/온보딩(임시 버튼)
 - `/`: 홈(여행 리스트/예산/정산 요약, 플로팅 스캔 버튼)
@@ -225,7 +226,9 @@ npm run dev
 - `/journeys/:journeyId/report`: 최종 정산 + AI 리포트, 이미지 저장(다운로드)
 - `/settings`: 설정(임시)
 
-## 데이터 흐름
+---
+
+### 데이터 흐름
 
 현재는 `src/mocks/data.ts`의 mock 데이터로 동작하며, 조회는 TanStack Query 훅(`src/features/journeys/queries.ts`)으로 감싸져 있습니다.  
 백엔드 API가 준비되면 queryFn만 교체하면 됩니다.
