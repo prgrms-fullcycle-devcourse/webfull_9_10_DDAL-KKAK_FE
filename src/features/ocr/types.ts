@@ -1,18 +1,17 @@
-import type { CurrencyCode, ExpenseType, PaymentMethod } from '@/types/common';
+import type { CurrencyCode, PaymentMethod } from '@/types/common';
 
 export type OcrDraft = {
-  store: string;
+  storeName: string;
   amountLocal: number;
   currency: CurrencyCode;
-  time: string;
+  /** 현지 wall-clock ("YYYY-MM-DDTHH:mm[:ss]"). UTC 변환 안 함. */
+  paidAt: string;
   category: string;
-  type: ExpenseType;
-  /** 공동일 때 n명 1/n (기본: 동행자 수) */
-  splitAmong?: number;
-  /** 공동일 때: 같이 나눌 사람 목록 */
+  splitMode: 'shared' | 'personal';
+  /** 공동일 때: 같이 나눌 사람 목록. shared면 splitWith.length가 1/n 기준. */
   splitWith?: string[];
   method?: PaymentMethod;
   payer: string;
   emoji: string;
-  memo: string;
+  comment: string;
 };

@@ -1,14 +1,15 @@
 import { Camera, Plus, User } from 'lucide-react';
 import { useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { BottomNav } from '../components/layout/BottomNav';
-import { Fab } from '../components/layout/Fab';
-import { getJourneyPhase, getTripStatusLabel } from '../lib/dates';
-import { formatKRW } from '../lib/money';
+import { BottomNav } from '@/components/layout/BottomNav';
+import { Fab, FabStack } from '@/components/layout/Fab';
+import { getJourneyPhase, getTripStatusLabel } from '@/lib/dates';
+import { formatKRW } from '@/lib/money';
 import type { Journey } from '@/features/journeys/types';
 import type { Expense } from '@/features/expenses/types';
-import { useAllExpensesQuery, useJourneysQuery } from '../features/journeys/queries';
-import { sumMySpendKRW, sumTotalKRW } from '../features/settlement/calc';
+import { useAllExpensesQuery } from '@/features/expenses/queries';
+import { useJourneysQuery } from '@/features/journeys/queries';
+import { sumMySpendKRW, sumTotalKRW } from '@/features/settlement/calc';
 
 function JourneyCard({
   j,
@@ -189,9 +190,11 @@ export function HomePage() {
       </main>
 
       {scanTarget ? (
-        <Fab label="영수증 스캔" onClick={() => nav(`/journeys/${scanTarget.id}/scan`)}>
-          <Camera className="size-8" />
-        </Fab>
+        <FabStack>
+          <Fab label="영수증 스캔" onClick={() => nav(`/journeys/${scanTarget.id}/scan`)}>
+            <Camera className="size-8" />
+          </Fab>
+        </FabStack>
       ) : null}
 
       <BottomNav />

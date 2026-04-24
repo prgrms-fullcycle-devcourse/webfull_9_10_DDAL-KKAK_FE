@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { Expense } from './types';
+import type { Expense } from '@/features/expenses/types';
 import { useJourneyQuery } from '@/features/journeys/queries';
 import {
   useAddExpenseMutation,
   useDeleteExpenseMutation,
   useExpenseQuery,
   useUpdateExpenseMutation,
-} from './queries';
+} from '@/features/expenses/queries';
 import { TopBar } from '@/components/layout/TopBar';
+import { nowLocalIso, toStoredWallClock } from '@/lib/datetime';
 
 type Mode = 'create' | 'edit' | 'ocr';
 
@@ -43,7 +44,7 @@ export function ExpenseForm({
   const [emoji, setEmoji] = useState('🍚');
   const [storeName, setStoreName] = useState('');
   const [amountLocal, setAmountLocal] = useState<number | ''>('');
-  const [paidAt, setPaidAt] = useState(() => new Date().toISOString().slice(0, 16));
+  const [paidAt, setPaidAt] = useState(() => nowLocalIso());
   const [payer, setPayer] = useState<string>('');
   const [splitMode, setSplitMode] = useState<'personal' | 'shared'>('personal');
   const [splitWith, setSplitWith] = useState<string[]>([]);
@@ -62,17 +63,16 @@ export function ExpenseForm({
   useEffect(() => {
     const src = existing ?? initialDraft;
     if (!src) return;
+
     if (src.emoji) setEmoji(src.emoji);
-    if (src.storeName || src.store) setStoreName(src.storeName ?? src.store ?? '');
+    if (src.storeName) setStoreName(src.storeName);
     if (src.amountLocal !== undefined) setAmountLocal(src.amountLocal);
     if (src.paidAt) setPaidAt(src.paidAt.slice(0, 16));
-    else if (src.date && src.time) setPaidAt(`${src.date}T${src.time}`);
     if (src.payer) setPayer(src.payer);
     if (src.splitMode) setSplitMode(src.splitMode);
-    else if (src.type) setSplitMode(src.type === 'shared' ? 'shared' : 'personal');
     if (src.splitWith) setSplitWith(src.splitWith);
     if (src.method) setMethod(src.method);
-    if (src.comment || src.memo) setComment(src.comment ?? src.memo ?? '');
+    if (src.comment) setComment(src.comment);
   }, [existing, initialDraft]);
 
   // ── 계산 ──
@@ -108,31 +108,21 @@ export function ExpenseForm({
     }
 
     const now = new Date().toISOString();
-    const paid = new Date(paidAt);
-    const date = paid.toISOString().slice(0, 10);
-    const time = paid.toTimeString().slice(0, 5);
     const payload: Expense = {
-      id: expenseId ?? String(Date.now()),
+      id: expenseId ?? crypto.randomUUID(),
       journeyId,
       emoji,
-      store: storeName.trim() || '(이름 없음)',
-      category: '기타',
-      date,
-      time,
       storeName: storeName.trim() || '(이름 없음)',
+      category: '기타',
       amountLocal,
       currency: journey.currency,
-      amountKRW,
-      paidAt: paid.toISOString(),
+      paidAt: toStoredWallClock(paidAt),
       payer,
       splitMode,
-      type: splitMode === 'shared' ? 'shared' : 'private',
-      splitAmong: splitMode === 'shared' ? splitWith.length : undefined,
       splitWith: splitMode === 'personal' ? [payer] : splitWith,
-      method,
-      memo: comment.trim() || undefined,
+      method: 'cash',
       comment: comment.trim() || undefined,
-      receiptImageUrl,
+      receiptImageUrl: undefined,
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
     };

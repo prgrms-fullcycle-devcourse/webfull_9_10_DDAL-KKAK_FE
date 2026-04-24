@@ -1,9 +1,9 @@
-import { MOCK_JOURNEYS } from '../../mocks/data';
+import { MOCK_JOURNEYS } from '@/mocks/data';
 import type { CurrencyCode } from '@/types/common';
 import type { Journey } from '@/features/journeys/types';
 import { loadAllExpenses, saveAllExpenses } from '@/features/expenses/storage';
 
-const KEY = 'tt_journeys_v1';
+const KEY = 'tt_journeys_v2';
 
 const VALID_CURRENCY: readonly CurrencyCode[] = ['JPY', 'USD', 'EUR', 'KRW'];
 

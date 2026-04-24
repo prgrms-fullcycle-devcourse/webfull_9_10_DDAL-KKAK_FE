@@ -39,7 +39,7 @@ export function JourneyCreatePage() {
   const [currency, setCurrency] = useState<CurrencyCode>('JPY');
   const [rateMode, setRateMode] = useState<RateMode>('fixed');
   const [fixedRate, setFixedRate] = useState<number | ''>(9.0);
-  const [participants, setParticipants] = useState<string[]>(['나', '지수', '민호']);
+  const [participants, setParticipants] = useState<string[]>(['나']);
   const [newParticipant, setNewParticipant] = useState('');
   const [dates, setDates] = useState({ start: today, end: today });
   const [hydratedFromId, setHydratedFromId] = useState<string | null>(null);

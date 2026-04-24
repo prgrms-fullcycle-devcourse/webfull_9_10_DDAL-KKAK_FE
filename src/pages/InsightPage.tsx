@@ -1,12 +1,9 @@
 import { useMemo } from 'react';
 import { useParams } from 'react-router-dom';
-import { TopBar } from '../components/layout/TopBar';
-import { useExpensesQuery, useJourneyQuery } from '../features/journeys/queries';
-
-function hourOf(time: string) {
-  const h = Number(time.split(':')[0] ?? 0);
-  return Number.isFinite(h) ? h : 0;
-}
+import { TopBar } from '@/components/layout/TopBar';
+import { useExpensesQuery } from '@/features/expenses/queries';
+import { useJourneyQuery } from '@/features/journeys/queries';
+import { hourOf } from '@/lib/datetime';
 
 export function InsightPage() {
   const { journeyId } = useParams();
@@ -19,8 +16,9 @@ export function InsightPage() {
     const byCategory: Record<string, number> = {};
     let lateNight = 0;
     for (const e of expenses) {
-      byCategory[e.category] = (byCategory[e.category] ?? 0) + e.amountLocal;
-      if (hourOf(e.time) >= 22) lateNight += 1;
+      const category = e.category ?? '기타';
+      byCategory[category] = (byCategory[category] ?? 0) + e.amountLocal;
+      if (hourOf(e.paidAt) >= 22) lateNight += 1;
     }
 
     const top = Object.entries(byCategory).sort((a, b) => b[1] - a[1])[0];
@@ -91,7 +89,7 @@ export function InsightPage() {
                 밤 10시 이후
               </p>
               <p className="mt-2 text-lg font-black text-slate-900">
-                {expenses.filter((e) => hourOf(e.time) >= 22).length}개
+                {expenses.filter((e) => hourOf(e.paidAt) >= 22).length}개
               </p>
             </div>
           </div>

@@ -1,6 +1,7 @@
-import type { Expense, Journey } from '../../types/types';
+import type { Expense } from '@/features/expenses/types';
+import type { Journey } from '@/features/journeys/types';
 
-/** 가계부에서 "나"로 쓸 이름 (participants·selfParticipant 기준) */
+/** 가계부에서 "나"로 쓸 이름 */
 export function ledgerSelfName(journey: Journey): string {
   const s = journey.selfParticipant?.trim();
   if (s) return s;
@@ -9,48 +10,41 @@ export function ledgerSelfName(journey: Journey): string {
   return '나';
 }
 
-function sharedSplitN(journey: Journey, expense: Expense): number {
-  const sw = expense.splitWith?.filter((p) => journey.participants.includes(p)) ?? [];
-  if (sw.length >= 1) return sw.length;
-  const n = expense.splitAmong;
-  if (typeof n === 'number' && n >= 1) return Math.floor(n);
-  return Math.max(journey.participants.length, 1);
+function sharedSplitPeople(journey: Journey, expense: Expense): string[] {
+  const sw = expense.splitWith.filter((p) => journey.participants.includes(p));
+  return sw.length ? sw : journey.participants.length ? journey.participants : ['나'];
 }
 
-function sharedSplitPeople(journey: Journey, expense: Expense): string[] {
-  const sw = expense.splitWith?.filter((p) => journey.participants.includes(p)) ?? [];
-  return sw.length ? sw : journey.participants.length ? journey.participants : ['나'];
+function sharedSplitN(journey: Journey, expense: Expense): number {
+  return Math.max(sharedSplitPeople(journey, expense).length, 1);
 }
 
 /** 이 지출에서 내가 부담하는 현지 금액 */
 export function expenseMyShareLocal(journey: Journey, expense: Expense): number {
-  if (expense.type === 'private') {
-    return expense.payer.trim() === ledgerSelfName(journey) ? expense.amountLocal : 0;
-  }
   const me = ledgerSelfName(journey);
+  if (expense.splitMode === 'personal') {
+    return expense.payer.trim() === me ? expense.amountLocal : 0;
+  }
   const people = sharedSplitPeople(journey, expense);
   if (!people.includes(me)) return 0;
-  return expense.amountLocal / Math.max(sharedSplitN(journey, expense), 1);
+  return expense.amountLocal / sharedSplitN(journey, expense);
 }
 
 export function sumMySpendLocal(journey: Journey, expenses: Expense[]) {
   return expenses.reduce((acc, e) => acc + expenseMyShareLocal(journey, e), 0);
 }
-
 export function sumMySpendKRW(journey: Journey, expenses: Expense[]) {
   return sumMySpendLocal(journey, expenses) * journey.rate;
 }
-
 export function sumTotalKRW(journey: Journey, expenses: Expense[]) {
   return expenses.reduce((acc, e) => acc + e.amountLocal * journey.rate, 0);
 }
-
 export function sumTotalLocal(expenses: Expense[]) {
   return expenses.reduce((acc, e) => acc + e.amountLocal, 0);
 }
 
 export function calcSharedSettlement(journey: Journey, expenses: Expense[]) {
-  const shared = expenses.filter((e) => e.type === 'shared');
+  const shared = expenses.filter((e) => e.splitMode === 'shared');
   const totalLocal = shared.reduce((acc, e) => acc + e.amountLocal, 0);
   const n = Math.max(journey.participants.length, 1);
   const perPersonLocal = totalLocal / n;
@@ -61,7 +55,6 @@ export function calcSharedSettlement(journey: Journey, expenses: Expense[]) {
 export type SettlementNet = { person: string; netLocal: number };
 export type SettlementTransfer = { from: string; to: string; amountLocal: number };
 
-/** 참가자별 net(+) 받음 / (-) 냄, 그리고 최소 송금 경로 */
 export function calcSettlement(journey: Journey, expenses: Expense[]) {
   const people = journey.participants.length ? journey.participants : ['나'];
   const paid: Record<string, number> = Object.fromEntries(people.map((p) => [p, 0]));
@@ -71,7 +64,7 @@ export function calcSettlement(journey: Journey, expenses: Expense[]) {
     const payer = people.includes(e.payer) ? e.payer : people[0];
     paid[payer] += e.amountLocal;
 
-    if (e.type === 'private') {
+    if (e.splitMode === 'personal') {
       owed[payer] += e.amountLocal;
       continue;
     }

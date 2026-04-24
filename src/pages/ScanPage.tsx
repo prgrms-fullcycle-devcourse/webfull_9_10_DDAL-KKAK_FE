@@ -2,7 +2,8 @@ import { ImagePlus, RefreshCcw, X } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import type { OcrDraft } from '@/features/ocr/types';
-import { fileToDataUrl } from '../lib/image';
+import { nowLocalIso } from '@/lib/datetime';
+import { fileToDataUrl } from '@/lib/image';
 
 export function ScanPage() {
   const nav = useNavigate();
@@ -18,20 +19,16 @@ export function ScanPage() {
     await new Promise((r) => setTimeout(r, 700));
 
     const draft: OcrDraft = {
-      store: '패밀리마트 나카스점',
+      storeName: '패밀리마트 나카스점',
       amountLocal: 1250,
       currency: 'JPY',
-      time: new Date().toLocaleTimeString('ko-KR', {
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: false,
-      }),
+      paidAt: nowLocalIso(),
       category: '식비',
-      type: 'shared',
+      splitMode: 'shared',
       method: 'card',
       payer: '나',
       emoji: '🍱',
-      memo: '',
+      comment: '',
     };
     setIsScanning(false);
     nav(`/journeys/${journeyId}/ocr-preview`, { state: { draft, imageDataUrl } });
