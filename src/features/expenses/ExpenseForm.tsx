@@ -63,6 +63,7 @@ export function ExpenseForm({
   useEffect(() => {
     const src = existing ?? initialDraft;
     if (!src) return;
+
     if (src.emoji) setEmoji(src.emoji);
     if (src.storeName) setStoreName(src.storeName);
     if (src.amountLocal !== undefined) setAmountLocal(src.amountLocal);
@@ -108,19 +109,20 @@ export function ExpenseForm({
 
     const now = new Date().toISOString();
     const payload: Expense = {
-      id: expenseId ?? String(Date.now()),
+      id: expenseId ?? crypto.randomUUID(),
       journeyId,
       emoji,
       storeName: storeName.trim() || '(이름 없음)',
+      category: '기타',
       amountLocal,
       currency: journey.currency,
       paidAt: toStoredWallClock(paidAt),
       payer,
       splitMode,
       splitWith: splitMode === 'personal' ? [payer] : splitWith,
-      method,
+      method: 'cash',
       comment: comment.trim() || undefined,
-      receiptImageUrl,
+      receiptImageUrl: undefined,
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
     };

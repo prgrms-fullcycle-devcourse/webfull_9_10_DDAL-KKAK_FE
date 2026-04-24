@@ -63,15 +63,19 @@ export function OcrPreviewPage() {
       journeyId,
       storeName: draft.storeName.trim() || '지출',
       amountLocal: Number(draft.amountLocal) || 0,
+
       currency: draft.currency,
       splitMode: draft.splitMode,
       splitWith,
+
       method: draft.method ?? 'card',
       category: draft.category || '기타',
       paidAt,
       payer: draft.payer,
       emoji: draft.emoji || '🧾',
+
       comment: draft.comment?.trim() || undefined,
+
       createdAt: systemNow,
       updatedAt: systemNow,
     });
