@@ -1,3 +1,5 @@
+import type { CurrencyCode, RateMode } from '@/types/common';
+
 export type Journey = {
   id: string;
   name: string;

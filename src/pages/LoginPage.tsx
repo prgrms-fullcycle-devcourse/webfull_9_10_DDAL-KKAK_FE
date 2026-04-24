@@ -24,7 +24,7 @@ export function LoginPage() {
           <button
             type="button"
             onClick={() => {
-              login('영아');
+              login({ id: 'demo-user', name: '영아' });
               nav(next, { replace: true });
             }}
             className="w-full rounded-2xl bg-yellow-300 py-4 text-sm font-black text-slate-900 active:scale-[0.99]"
@@ -34,7 +34,7 @@ export function LoginPage() {
           <button
             type="button"
             onClick={() => {
-              login('영아');
+              login({ id: 'demo-user', name: '영아' });
               nav(next, { replace: true });
             }}
             className="w-full rounded-2xl bg-slate-900 py-4 text-sm font-black text-white active:scale-[0.99]"

@@ -63,6 +63,8 @@ export function OcrPreviewPage() {
       journeyId,
       store: draft.store.trim() || '지출',
       amountLocal: Number(draft.amountLocal) || 0,
+      currency: journey.currency,
+      amountKRW: Math.round((Number(draft.amountLocal) || 0) * journey.rate),
       splitAmong:
         draft.type === 'shared'
           ? (draft.splitAmong ?? Math.max(journey.participants.length, 1))

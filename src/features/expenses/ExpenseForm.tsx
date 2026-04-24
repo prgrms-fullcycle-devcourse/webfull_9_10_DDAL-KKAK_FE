@@ -1,4 +1,3 @@
-import { ChevronLeft } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import type { Expense } from './types';
 import { useJourneyQuery } from '@/features/journeys/queries';
@@ -64,14 +63,16 @@ export function ExpenseForm({
     const src = existing ?? initialDraft;
     if (!src) return;
     if (src.emoji) setEmoji(src.emoji);
-    if (src.storeName) setStoreName(src.storeName);
+    if (src.storeName || src.store) setStoreName(src.storeName ?? src.store ?? '');
     if (src.amountLocal !== undefined) setAmountLocal(src.amountLocal);
     if (src.paidAt) setPaidAt(src.paidAt.slice(0, 16));
+    else if (src.date && src.time) setPaidAt(`${src.date}T${src.time}`);
     if (src.payer) setPayer(src.payer);
     if (src.splitMode) setSplitMode(src.splitMode);
+    else if (src.type) setSplitMode(src.type === 'shared' ? 'shared' : 'personal');
     if (src.splitWith) setSplitWith(src.splitWith);
     if (src.method) setMethod(src.method);
-    if (src.comment) setComment(src.comment);
+    if (src.comment || src.memo) setComment(src.comment ?? src.memo ?? '');
   }, [existing, initialDraft]);
 
   // ── 계산 ──
@@ -107,19 +108,29 @@ export function ExpenseForm({
     }
 
     const now = new Date().toISOString();
+    const paid = new Date(paidAt);
+    const date = paid.toISOString().slice(0, 10);
+    const time = paid.toTimeString().slice(0, 5);
     const payload: Expense = {
       id: expenseId ?? String(Date.now()),
       journeyId,
       emoji,
+      store: storeName.trim() || '(이름 없음)',
+      category: '기타',
+      date,
+      time,
       storeName: storeName.trim() || '(이름 없음)',
       amountLocal,
       currency: journey.currency,
       amountKRW,
-      paidAt: new Date(paidAt).toISOString(),
+      paidAt: paid.toISOString(),
       payer,
       splitMode,
+      type: splitMode === 'shared' ? 'shared' : 'private',
+      splitAmong: splitMode === 'shared' ? splitWith.length : undefined,
       splitWith: splitMode === 'personal' ? [payer] : splitWith,
       method,
+      memo: comment.trim() || undefined,
       comment: comment.trim() || undefined,
       receiptImageUrl,
       createdAt: existing?.createdAt ?? now,
