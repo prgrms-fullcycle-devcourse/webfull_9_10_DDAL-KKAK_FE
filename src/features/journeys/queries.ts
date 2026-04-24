@@ -6,7 +6,6 @@ import {
   loadJourneys,
   updateJourney,
 } from '@/features/journeys/storage';
-import { loadAllExpenses } from '@/features/expenses/storage';
 
 async function sleep(ms: number) {
   await new Promise((r) => setTimeout(r, ms));
@@ -31,27 +30,6 @@ export function useJourneyQuery(journeyId: string | undefined) {
       const found = loadJourneys().find((j) => j.id === journeyId);
       if (!found) throw new Error('여정을 찾을 수 없어요.');
       return found;
-    },
-  });
-}
-
-export function useExpensesQuery(journeyId: string | undefined) {
-  return useQuery({
-    queryKey: ['expenses', journeyId],
-    enabled: !!journeyId,
-    queryFn: async () => {
-      await sleep(150);
-      return loadAllExpenses().filter((e) => e.journeyId === journeyId);
-    },
-  });
-}
-
-export function useAllExpensesQuery() {
-  return useQuery({
-    queryKey: ['expenses'],
-    queryFn: async () => {
-      await sleep(150);
-      return loadAllExpenses();
     },
   });
 }

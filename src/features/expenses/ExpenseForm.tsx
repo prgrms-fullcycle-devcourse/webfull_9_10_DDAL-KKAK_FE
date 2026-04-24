@@ -1,14 +1,14 @@
-import { ChevronLeft } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
-import type { Expense } from './types';
+import type { Expense } from '@/features/expenses/types';
 import { useJourneyQuery } from '@/features/journeys/queries';
 import {
   useAddExpenseMutation,
   useDeleteExpenseMutation,
   useExpenseQuery,
   useUpdateExpenseMutation,
-} from './queries';
+} from '@/features/expenses/queries';
 import { TopBar } from '@/components/layout/TopBar';
+import { nowLocalIso, toStoredWallClock } from '@/lib/datetime';
 
 type Mode = 'create' | 'edit' | 'ocr';
 
@@ -44,7 +44,7 @@ export function ExpenseForm({
   const [emoji, setEmoji] = useState('🍚');
   const [storeName, setStoreName] = useState('');
   const [amountLocal, setAmountLocal] = useState<number | ''>('');
-  const [paidAt, setPaidAt] = useState(() => new Date().toISOString().slice(0, 16));
+  const [paidAt, setPaidAt] = useState(() => nowLocalIso());
   const [payer, setPayer] = useState<string>('');
   const [splitMode, setSplitMode] = useState<'personal' | 'shared'>('personal');
   const [splitWith, setSplitWith] = useState<string[]>([]);
@@ -114,8 +114,7 @@ export function ExpenseForm({
       storeName: storeName.trim() || '(이름 없음)',
       amountLocal,
       currency: journey.currency,
-      amountKRW,
-      paidAt: new Date(paidAt).toISOString(),
+      paidAt: toStoredWallClock(paidAt),
       payer,
       splitMode,
       splitWith: splitMode === 'personal' ? [payer] : splitWith,

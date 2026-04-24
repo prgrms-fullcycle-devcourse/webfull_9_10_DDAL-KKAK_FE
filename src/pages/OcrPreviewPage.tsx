@@ -1,13 +1,14 @@
 import { RotateCcw, RotateCw, Smile, User, Users } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
-import { TopBar } from '../components/layout/TopBar';
-import { useJourneyQuery } from '../features/journeys/queries';
-import { formatKRW, formatLocal } from '../lib/money';
-import { ledgerSelfName } from '../features/settlement/calc';
-import { rotateDataUrl } from '../lib/image';
+import { TopBar } from '@/components/layout/TopBar';
+import { useJourneyQuery } from '@/features/journeys/queries';
+import { formatKRW, formatLocal } from '@/lib/money';
+import { ledgerSelfName } from '@/features/settlement/calc';
+import { rotateDataUrl } from '@/lib/image';
 import type { OcrDraft } from '@/features/ocr/types';
-import { useAddExpenseMutation } from '../features/expenses/queries';
+import { useAddExpenseMutation } from '@/features/expenses/queries';
+import { nowLocalIso, toStoredWallClock } from '@/lib/datetime';
 
 type LocationState = { draft?: OcrDraft; imageDataUrl?: string };
 
@@ -52,30 +53,27 @@ export function OcrPreviewPage() {
 
   const onPost = async () => {
     if (!journeyId || !draft) return;
-    const now = new Date();
-    const date = now.toISOString().slice(0, 10);
-    const time =
-      draft.time ||
-      now.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false });
+    const systemNow = new Date().toISOString(); // createdAt/updatedAt 용 (UTC)
+    const paidAt = toStoredWallClock(draft.paidAt || nowLocalIso());
+    const isShared = draft.splitMode === 'shared';
+    const splitWith = isShared ? (draft.splitWith ?? defaultSplitWith) : [draft.payer];
 
     await addExpense.mutateAsync({
       id: `e-${Date.now()}`,
       journeyId,
-      store: draft.store.trim() || '지출',
+      storeName: draft.storeName.trim() || '지출',
       amountLocal: Number(draft.amountLocal) || 0,
-      splitAmong:
-        draft.type === 'shared'
-          ? (draft.splitAmong ?? Math.max(journey.participants.length, 1))
-          : undefined,
-      splitWith: draft.type === 'shared' ? (draft.splitWith ?? defaultSplitWith) : undefined,
+      currency: draft.currency,
+      splitMode: draft.splitMode,
+      splitWith,
       method: draft.method ?? 'card',
       category: draft.category || '기타',
-      time,
-      date,
-      type: draft.type,
+      paidAt,
       payer: draft.payer,
       emoji: draft.emoji || '🧾',
-      memo: draft.memo?.trim() || undefined,
+      comment: draft.comment?.trim() || undefined,
+      createdAt: systemNow,
+      updatedAt: systemNow,
     });
 
     nav(`/journeys/${journeyId}`, { replace: true });
@@ -175,8 +173,8 @@ export function OcrPreviewPage() {
                 Store
               </label>
               <input
-                value={draft.store}
-                onChange={(e) => setDraft({ ...draft, store: e.target.value })}
+                value={draft.storeName}
+                onChange={(e) => setDraft({ ...draft, storeName: e.target.value })}
                 className="w-full bg-transparent text-xl font-black outline-none"
               />
             </div>
@@ -216,26 +214,25 @@ export function OcrPreviewPage() {
                 onClick={() =>
                   setDraft({
                     ...draft,
-                    type: 'shared',
-                    splitAmong: draft.splitAmong ?? Math.max(journey.participants.length, 1),
+                    splitMode: 'shared',
                     splitWith: draft.splitWith ?? defaultSplitWith,
                   })
                 }
-                className={`flex-1 rounded-lg py-3 text-sm font-black transition-all ${draft.type === 'shared' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400'}`}
+                className={`flex-1 rounded-lg py-3 text-sm font-black transition-all ${draft.splitMode === 'shared' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400'}`}
               >
                 <Users className="mr-2 inline size-4" /> 공동 지출
               </button>
               <button
                 type="button"
-                onClick={() => setDraft({ ...draft, type: 'private' })}
-                className={`flex-1 rounded-lg py-3 text-sm font-black transition-all ${draft.type === 'private' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400'}`}
+                onClick={() => setDraft({ ...draft, splitMode: 'personal' })}
+                className={`flex-1 rounded-lg py-3 text-sm font-black transition-all ${draft.splitMode === 'personal' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400'}`}
               >
                 <User className="mr-2 inline size-4" /> 개인 지출
               </button>
             </div>
           </div>
 
-          {draft.type === 'shared' ? (
+          {draft.splitMode === 'shared' ? (
             <div>
               <label className="mb-2 block text-[10px] font-black uppercase text-slate-300">
                 누구랑 1/n? (선택된 인원 수로 나눔)
@@ -253,7 +250,6 @@ export function OcrPreviewPage() {
                         if (next.length === 0) return;
                         setDraft({
                           ...draft,
-                          splitAmong: next.length,
                           splitWith: next,
                         });
                       }}
@@ -328,8 +324,8 @@ export function OcrPreviewPage() {
             <div className="flex items-center rounded-2xl bg-slate-50 p-4">
               <Smile className="mr-3 size-5 text-slate-400" />
               <input
-                value={draft.memo}
-                onChange={(e) => setDraft({ ...draft, memo: e.target.value })}
+                value={draft.comment}
+                onChange={(e) => setDraft({ ...draft, comment: e.target.value })}
                 placeholder="그때의 기분이나 맛집 평점을 기록!"
                 className="flex-1 bg-transparent text-sm font-bold outline-none"
               />
@@ -341,8 +337,8 @@ export function OcrPreviewPage() {
               미리보기
             </p>
             <p className="mt-2 text-sm font-black text-slate-900">
-              {draft.emoji} {draft.store} • {formatLocal(draft.amountLocal)} {journey.currency} (약{' '}
-              {formatKRW(draft.amountLocal * journey.rate)}원)
+              {draft.emoji} {draft.storeName} • {formatLocal(draft.amountLocal)} {journey.currency}{' '}
+              (약 {formatKRW(draft.amountLocal * journey.rate)}원)
             </p>
             <p className="mt-1 text-[10px] font-bold text-slate-400">
               결제 수단: {(draft.method ?? 'card') === 'cash' ? '현금' : '카드'}
@@ -350,12 +346,12 @@ export function OcrPreviewPage() {
             <p className="mt-2 text-[11px] font-bold text-blue-600">
               내 부담(가계부 기준 {ledgerSelfName(journey)}):{' '}
               {formatLocal(
-                draft.type === 'private'
+                draft.splitMode === 'personal'
                   ? draft.payer.trim() === ledgerSelfName(journey)
                     ? draft.amountLocal
                     : 0
                   : draft.amountLocal /
-                      (draft.splitAmong ?? Math.max(journey.participants.length, 1)),
+                      Math.max(draft.splitWith?.length ?? journey.participants.length, 1),
               )}{' '}
               {journey.currency}
             </p>

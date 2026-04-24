@@ -6,23 +6,25 @@ export type Expense = {
 
   emoji: string;
   storeName: string;
+  category?: string;
 
   amountLocal: number;
   currency: CurrencyCode;
-  amountKRW: number; // 저장 시점 스냅샷
+  /**
+   * 현지 wall-clock ("YYYY-MM-DDTHH:mm:ss"). timezone 변환 없이 문자열 그대로 저장·표시.
+   * 표시는 @/lib/datetime 의 dateKeyOf / timeLabelOf / hourOf 로만.
+   */
+  paidAt: string;
 
-  paidAt: string; // ISO datetime
-
-  payer: string; // 참여자 이름 (journey.participants 중 하나)
+  payer: string;
 
   splitMode: 'personal' | 'shared';
-  splitWith: string[]; // 분담하는 사람 이름 배열
-  // personal이면 [payer] 혼자
-  // shared면 나눠내는 사람들 (payer 포함)
+  splitWith: string[];
 
   method: 'cash' | 'card';
   comment?: string;
   receiptImageUrl?: string;
+
   createdAt: string;
   updatedAt: string;
 };

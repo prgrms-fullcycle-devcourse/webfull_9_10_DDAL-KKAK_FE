@@ -1,9 +1,10 @@
-import { BarChart3, Camera, Clock, Edit2, User as UserIcon } from 'lucide-react';
+import { BarChart3, Camera, Clock, Edit2, Pencil, User as UserIcon } from 'lucide-react';
 import { useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Fab } from '../components/layout/Fab';
-import { TopBar } from '../components/layout/TopBar';
-import { useExpensesQuery, useJourneyQuery } from '../features/journeys/queries';
+import { Fab, FabStack } from '@/components/layout/Fab';
+import { TopBar } from '@/components/layout/TopBar';
+import { useExpensesQuery } from '@/features/expenses/queries';
+import { useJourneyQuery } from '@/features/journeys/queries';
 import {
   expenseMyShareLocal,
   ledgerSelfName,
@@ -11,8 +12,9 @@ import {
   sumMySpendLocal,
   sumTotalKRW,
   sumTotalLocal,
-} from '../features/settlement/calc';
-import { formatKRW, formatLocal } from '../lib/money';
+} from '@/features/settlement/calc';
+import { dateKeyOf, timeLabelOf } from '@/lib/datetime';
+import { formatKRW, formatLocal } from '@/lib/money';
 
 export function JourneyTimelinePage() {
   const nav = useNavigate();
@@ -24,13 +26,14 @@ export function JourneyTimelinePage() {
   const grouped = useMemo(() => {
     const by: Record<string, typeof expenses> = {};
     for (const e of expenses) {
-      (by[e.date] ??= []).push(e);
+      const key = dateKeyOf(e.paidAt);
+      (by[key] ??= []).push(e);
     }
     return Object.entries(by)
       .sort(([a], [b]) => (a < b ? 1 : -1))
       .map(([date, items]) => ({
         date,
-        items: [...items].sort((a, b) => (a.time < b.time ? 1 : -1)),
+        items: [...items].sort((a, b) => (a.paidAt < b.paidAt ? 1 : -1)),
       }));
   }, [expenses]);
 
@@ -136,26 +139,28 @@ export function JourneyTimelinePage() {
               <div className="space-y-10">
                 {items.map((e) => {
                   const myShare = expenseMyShareLocal(journey, e);
-                  const splitN =
-                    e.type === 'shared'
-                      ? typeof e.splitAmong === 'number' && e.splitAmong >= 1
-                        ? e.splitAmong
-                        : Math.max(journey.participants.length, 1)
-                      : null;
+                  const isShared = e.splitMode === 'shared';
+                  const splitN = isShared
+                    ? Math.max(e.splitWith?.length ?? journey.participants.length, 1)
+                    : null;
                   return (
-                    <div key={e.id} className="group">
+                    <div
+                      key={e.id}
+                      onClick={() => nav(`/journeys/${journey.id}/expenses/${e.id}/edit`)}
+                      className="group -mx-2 cursor-pointer rounded-2xl px-2 py-2 transition active:bg-slate-50"
+                    >
                       <div className="mb-2 flex items-start justify-between">
                         <div className="flex items-center gap-3">
                           <span className="text-3xl drop-shadow-sm">{e.emoji}</span>
                           <div>
                             <div className="mb-1 flex items-center gap-2">
                               <h4 className="text-base font-black leading-none text-slate-900">
-                                {e.store}
+                                {e.storeName}
                               </h4>
                               <span
-                                className={`rounded px-1.5 py-0.5 text-[8px] font-black tracking-tighter ${e.type === 'shared' ? 'bg-orange-100 text-orange-600' : 'bg-slate-100 text-slate-500'}`}
+                                className={`rounded px-1.5 py-0.5 text-[8px] font-black tracking-tighter ${isShared ? 'bg-orange-100 text-orange-600' : 'bg-slate-100 text-slate-500'}`}
                               >
-                                {e.type === 'shared'
+                                {isShared
                                   ? `공동${splitN != null ? ` · ${splitN}명 1/n` : ''}`
                                   : '개인'}
                               </span>
@@ -164,7 +169,7 @@ export function JourneyTimelinePage() {
                               </span>
                             </div>
                             <p className="flex items-center text-[10px] font-bold uppercase tracking-tighter text-slate-300">
-                              <Clock className="mr-1 size-3" /> {e.time} •{' '}
+                              <Clock className="mr-1 size-3" /> {timeLabelOf(e.paidAt)} •{' '}
                               <UserIcon className="mx-1 size-3" /> 결제자: {e.payer}
                             </p>
                           </div>
@@ -177,7 +182,7 @@ export function JourneyTimelinePage() {
                           <p className="mt-1 text-[10px] font-bold tracking-tighter text-slate-300">
                             약 {formatKRW(e.amountLocal * journey.rate)}원
                           </p>
-                          {e.type === 'shared' ? (
+                          {isShared ? (
                             <p className="mt-1 text-[10px] font-black text-blue-600">
                               내 몫 {formatLocal(myShare)} {journey.currency} (약{' '}
                               {formatKRW(myShare * journey.rate)}원)
@@ -186,10 +191,10 @@ export function JourneyTimelinePage() {
                         </div>
                       </div>
 
-                      {e.memo ? (
+                      {e.comment ? (
                         <div className="ml-11 rounded-2xl border-l-4 border-blue-100 bg-slate-50 px-4 py-3">
                           <p className="text-sm font-medium leading-relaxed tracking-tight text-slate-500">
-                            "{e.memo}"
+                            "{e.comment}"
                           </p>
                         </div>
                       ) : null}
@@ -202,9 +207,18 @@ export function JourneyTimelinePage() {
         </section>
       </main>
 
-      <Fab label="영수증 스캔" onClick={() => nav(`/journeys/${journey.id}/scan`)}>
-        <Camera className="size-8" />
-      </Fab>
+      <FabStack>
+        <Fab
+          variant="secondary"
+          label="수기 입력"
+          onClick={() => nav(`/journeys/${journey.id}/expenses/new`)}
+        >
+          <Pencil className="size-5" />
+        </Fab>
+        <Fab label="영수증 스캔" onClick={() => nav(`/journeys/${journey.id}/scan`)}>
+          <Camera className="size-8" />
+        </Fab>
+      </FabStack>
     </div>
   );
 }

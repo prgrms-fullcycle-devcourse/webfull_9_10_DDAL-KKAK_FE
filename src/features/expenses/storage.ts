@@ -1,7 +1,7 @@
-import { MOCK_EXPENSES } from '../../mocks/data';
+import { MOCK_EXPENSES } from '@/mocks/data';
 import type { Expense } from '@/features/expenses/types';
 
-const KEY = 'tt_expenses_v1';
+const KEY = 'tt_expenses_v2';
 
 export function loadAllExpenses(): Expense[] {
   try {

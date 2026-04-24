@@ -1,10 +1,12 @@
 import html2canvas from 'html2canvas';
 import { useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { TopBar } from '../components/layout/TopBar';
-import { useExpensesQuery, useJourneyQuery } from '../features/journeys/queries';
-import { calcSettlement, ledgerSelfName } from '../features/settlement/calc';
-import { formatKRW, formatLocal } from '../lib/money';
+import { TopBar } from '@/components/layout/TopBar';
+import { useExpensesQuery } from '@/features/expenses/queries';
+import { useJourneyQuery } from '@/features/journeys/queries';
+import { calcSettlement, ledgerSelfName } from '@/features/settlement/calc';
+import { dateKeyOf, timeLabelOf } from '@/lib/datetime';
+import { formatKRW, formatLocal } from '@/lib/money';
 
 export function ReportPage() {
   const nav = useNavigate();
@@ -179,44 +181,37 @@ export function ReportPage() {
                   {expenses.length ? (
                     expenses
                       .map((e) => {
-                        const splitPeople =
-                          e.type === 'shared'
-                            ? (e.splitWith?.filter((x) => people.includes(x)) ?? people)
-                            : [];
-                        const n =
-                          e.type === 'shared'
-                            ? Math.max(
-                                splitPeople.length || e.splitAmong || Math.max(people.length, 1),
-                                1,
-                              )
-                            : 1;
-                        const myShare =
-                          e.type === 'private'
-                            ? e.payer === selected
-                              ? e.amountLocal
-                              : 0
-                            : splitPeople.includes(selected)
-                              ? e.amountLocal / n
-                              : 0;
+                        const isShared = e.splitMode === 'shared';
+                        const splitPeople = isShared
+                          ? (e.splitWith?.filter((x) => people.includes(x)) ?? people)
+                          : [];
+                        const n = isShared
+                          ? Math.max(splitPeople.length || Math.max(people.length, 1), 1)
+                          : 1;
+                        const myShare = !isShared
+                          ? e.payer === selected
+                            ? e.amountLocal
+                            : 0
+                          : splitPeople.includes(selected)
+                            ? e.amountLocal / n
+                            : 0;
 
-                        return { e, myShare, splitPeople, n };
+                        return { e, myShare, splitPeople, n, isShared };
                       })
                       .filter((x) => x.myShare > 0)
-                      .map(({ e, myShare, splitPeople, n }) => (
+                      .map(({ e, myShare, splitPeople, n, isShared }) => (
                         <div
                           key={e.id}
                           className="flex items-start justify-between rounded-2xl bg-slate-50 px-4 py-3"
                         >
                           <div className="min-w-0 pr-3">
                             <p className="truncate text-sm font-black text-slate-900">
-                              {e.emoji} {e.store}
+                              {e.emoji} {e.storeName}
                             </p>
                             <p className="mt-1 text-[10px] font-bold text-slate-400">
-                              {e.date} {e.time} · 결제자 {e.payer} ·{' '}
+                              {dateKeyOf(e.paidAt)} {timeLabelOf(e.paidAt)} · 결제자 {e.payer} ·{' '}
                               {(e.method ?? 'card') === 'cash' ? '현금' : '카드'} ·{' '}
-                              {e.type === 'shared'
-                                ? `공동 (${splitPeople.join(', ')}) 1/${n}`
-                                : '개인'}
+                              {isShared ? `공동 (${splitPeople.join(', ')}) 1/${n}` : '개인'}
                             </p>
                             <p className="mt-1 text-[10px] font-black text-blue-600">
                               {selected} 반영 금액: {formatLocal(myShare)} {journey.currency}
