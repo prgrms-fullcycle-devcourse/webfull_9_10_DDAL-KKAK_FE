@@ -16,7 +16,8 @@ export function InsightPage() {
     const byCategory: Record<string, number> = {};
     let lateNight = 0;
     for (const e of expenses) {
-      byCategory[e.category] = (byCategory[e.category] ?? 0) + e.amountLocal;
+      const category = e.category ?? '기타';
+      byCategory[category] = (byCategory[category] ?? 0) + e.amountLocal;
       if (hourOf(e.paidAt) >= 22) lateNight += 1;
     }
 
