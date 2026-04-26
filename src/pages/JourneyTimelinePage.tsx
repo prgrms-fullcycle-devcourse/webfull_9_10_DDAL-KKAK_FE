@@ -82,7 +82,10 @@ export function JourneyTimelinePage() {
   const mySpendLocal = sumMySpendLocal(journey, expenses);
   const mySpendKRW = sumMySpendKRW(journey, expenses);
 
-  const tripDateRange = `${journey.startDate.replaceAll('-', '.')} ~ ${journey.endDate.replaceAll('-', '.')}`;
+  const start = new Date(`${journey.startDate}T00:00:00Z`);
+  const end = new Date(`${journey.endDate}T00:00:00Z`);
+  const totalDays = Math.round((end.getTime() - start.getTime()) / 86_400_000) + 1;
+  const tripDateRange = `${journey.startDate.replaceAll('-', '.')} ~ ${journey.endDate.replaceAll('-', '.')} · ${totalDays}일`;
 
   const statusBadge = {
     active: { label: '여행 중', className: 'bg-green-100 text-green-600' },
