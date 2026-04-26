@@ -6,9 +6,7 @@ import { TopBar } from '@/components/layout/TopBar';
 import { useExpensesQuery } from '@/features/expenses/queries';
 import { useJourneyQuery } from '@/features/journeys/queries';
 import {
-  calcSettlement,
   expenseMyShareLocal,
-  ledgerSelfName,
   sumMySpendKRW,
   sumMySpendLocal,
   sumTotalKRW,
@@ -75,7 +73,9 @@ export function JourneyTimelinePage() {
     const x = e.pageX - filterScrollRef.current.offsetLeft;
     filterScrollRef.current.scrollLeft = dragScrollLeft.current - (x - dragStartX.current);
   };
-  const handleMouseUp = () => { isDragging.current = false; };
+  const handleMouseUp = () => {
+    isDragging.current = false;
+  };
 
   const filteredGrouped = useMemo(
     () => (selectedDate ? grouped.filter(({ date }) => date === selectedDate) : grouped),
@@ -88,24 +88,12 @@ export function JourneyTimelinePage() {
   const mySpendLocal = sumMySpendLocal(journey, expenses);
   const mySpendKRW = sumMySpendKRW(journey, expenses);
 
-  // 정산 요약: 내 net = 낸돈 − 부담할몫
-  const selfName = ledgerSelfName(journey);
-  const { nets } = calcSettlement(journey, expenses);
-  const myNetLocal = nets.find((n) => n.person === selfName)?.netLocal ?? 0;
-  const myNetKRW = Math.round(myNetLocal * journey.rate);
-  const settleTone: 'credit' | 'debit' | 'none' =
-    myNetKRW > 0 ? 'credit' : myNetKRW < 0 ? 'debit' : 'none';
-  const settleLabel =
-    settleTone === 'credit' ? '받을 돈' : settleTone === 'debit' ? '보낼 돈' : '정산 완료';
-  const settleAmountAbs = Math.abs(myNetKRW);
-  const settleAmountAbsLocal = Math.abs(myNetLocal);
-
   const tripDateRange = `${journey.startDate.replaceAll('-', '.')} ~ ${journey.endDate.replaceAll('-', '.')}`;
 
   const statusBadge = {
-    active:  { label: '여행 중', className: 'bg-green-100 text-green-600' },
-    planned: { label: '예정',    className: 'bg-blue-100 text-blue-600' },
-    ended:   { label: '종료',    className: 'bg-slate-100 text-slate-400' },
+    active: { label: '여행 중', className: 'bg-green-100 text-green-600' },
+    planned: { label: '예정', className: 'bg-blue-100 text-blue-600' },
+    ended: { label: '종료', className: 'bg-slate-100 text-slate-400' },
   }[journey.status];
 
   return (
@@ -114,7 +102,9 @@ export function JourneyTimelinePage() {
         title={
           <span className="flex items-center gap-2">
             {journey.name}
-            <span className={`rounded-full px-2 py-0.5 text-[10px] font-black tracking-tight ${statusBadge.className}`}>
+            <span
+              className={`rounded-full px-2 py-0.5 text-[10px] font-black tracking-tight ${statusBadge.className}`}
+            >
               {statusBadge.label}
             </span>
           </span>
@@ -145,6 +135,7 @@ export function JourneyTimelinePage() {
 
       <main className="space-y-10 px-6 py-8">
         <section className="rounded-[32px] bg-slate-900 p-6 text-white shadow-xl">
+          {/* 헤더 */}
           <div className="mb-6 flex items-center justify-between">
             <div className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-white/50">
               <span aria-hidden>👥</span>
@@ -159,40 +150,72 @@ export function JourneyTimelinePage() {
             </button>
           </div>
 
+          {/* 메인: 내 총 지출 */}
           <div>
             <p className="text-[10px] font-black uppercase tracking-widest text-white/50">
-              {settleLabel}
+              내 총 지출
             </p>
-            {settleTone === 'none' ? (
-              <h3 className="mt-2 text-2xl font-black text-white/60">정산할 금액이 없어요</h3>
-            ) : (
-              <>
-                <div className="mt-2 flex items-baseline gap-2">
-                  <h3 className="text-4xl font-black tracking-tight text-white">
-                    {formatKRW(settleAmountAbs)}
-                  </h3>
-                  <span className="text-lg font-bold text-white/70">KRW</span>
-                </div>
-                <p className="mt-1 text-[10px] font-bold text-white/40">
-                  ≈ {formatLocal(settleAmountAbsLocal)} {journey.currency}
-                </p>
-              </>
-            )}
+            <div className="mt-2 flex items-baseline gap-2">
+              <h3 className="text-4xl font-black tracking-tight text-white">
+                {formatKRW(mySpendKRW)}
+              </h3>
+              <span className="text-lg font-bold text-white/70">KRW</span>
+            </div>
+            <p className="mt-1 text-[10px] font-bold text-white/40">
+              ≈ {formatLocal(mySpendLocal)} {journey.currency}
+            </p>
           </div>
 
-          <div className="mt-5 space-y-2 border-t border-white/10 pt-4">
-            <div className="flex items-center justify-between text-xs font-bold">
-              <span className="text-white/50">내 지출</span>
-              <span className="text-white/70">
-                <span className="font-black text-white">{formatKRW(mySpendKRW)}원</span>
-                <span className="ml-1 text-[10px] font-bold text-white/40">
-                  ({formatLocal(mySpendLocal)} {journey.currency})
-                </span>
-              </span>
-            </div>
+          {/* 예산 캐릭터 */}
+          {journey.budgetKRW != null &&
+            (() => {
+              const ratio = mySpendKRW / journey.budgetKRW;
+              const character =
+                ratio >= 1
+                  ? {
+                      emoji: '🔥',
+                      message: '예산 범위를 벗어났어요!! 망함.',
+                      bubble: 'bg-red-500/30 text-red-200',
+                    }
+                  : ratio >= 0.8
+                    ? {
+                        emoji: '😰',
+                        message: '지출 속도가 다소 빨라요. 지금부터는 신중을 기해주세요!',
+                        bubble: 'bg-orange-500/30 text-orange-200',
+                      }
+                    : ratio >= 0.5
+                      ? {
+                          emoji: '🤔',
+                          message: '정확히 절반을 사용하셨네요. 남은 일정도 계획대로 부탁드려요!',
+                          bubble: 'bg-yellow-500/20 text-yellow-200',
+                        }
+                      : {
+                          emoji: '😄',
+                          message: '편안한 마음으로 지출을 이어가셔도 좋겠어요!',
+                          bubble: 'bg-green-500/20 text-green-200',
+                        };
+              return (
+                <div className="mt-5 flex items-center gap-3">
+                  <span className="text-4xl">{character.emoji}</span>
+                  <div className="flex-1">
+                    <div
+                      className={`relative rounded-2xl rounded-tl-none px-3.5 py-2.5 ${character.bubble}`}
+                    >
+                      <p className="text-[11px] font-black leading-snug">{character.message}</p>
+                      <p className="mt-0.5 text-[10px] font-bold opacity-70">
+                        예산 {formatKRW(journey.budgetKRW)}원 중 {Math.round(ratio * 100)}% 사용
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+
+          {/* 하단 보조 정보 */}
+          <div className="mt-5 border-t border-white/10 pt-4">
             <div className="flex items-center justify-between text-[11px] font-bold">
-              <span className="text-white/40">영수증 합</span>
-              <span className="text-white/55">
+              <span className="text-white/40">영수증 합계</span>
+              <span>
                 <span className="text-white/70">{formatKRW(totalKRW)}원</span>
                 <span className="ml-1 text-[10px] font-bold text-white/30">
                   (약 {formatLocal(totalKRW / journey.rate)} {journey.currency})
