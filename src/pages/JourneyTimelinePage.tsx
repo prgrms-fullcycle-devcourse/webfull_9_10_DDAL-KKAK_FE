@@ -1,5 +1,5 @@
 import { BarChart3, Camera, Clock, Edit2, Pencil, User as UserIcon } from 'lucide-react';
-import { useMemo } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Fab, FabStack } from '@/components/layout/Fab';
 import { TopBar } from '@/components/layout/TopBar';
@@ -44,6 +44,43 @@ export function JourneyTimelinePage() {
         items: [...items].sort((a, b) => (a.paidAt < b.paidAt ? 1 : -1)),
       }));
   }, [expenses]);
+
+  const allDates = useMemo(() => {
+    if (!journey) return [];
+    const dates: string[] = [];
+    const cur = new Date(`${journey.startDate}T00:00:00Z`);
+    const end = new Date(`${journey.endDate}T00:00:00Z`);
+    while (cur <= end) {
+      dates.push(cur.toISOString().slice(0, 10));
+      cur.setUTCDate(cur.getUTCDate() + 1);
+    }
+    return dates;
+  }, [journey]);
+
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+
+  const filterScrollRef = useRef<HTMLDivElement>(null);
+  const isDragging = useRef(false);
+  const dragStartX = useRef(0);
+  const dragScrollLeft = useRef(0);
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    isDragging.current = true;
+    dragStartX.current = e.pageX - (filterScrollRef.current?.offsetLeft ?? 0);
+    dragScrollLeft.current = filterScrollRef.current?.scrollLeft ?? 0;
+  };
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!isDragging.current || !filterScrollRef.current) return;
+    e.preventDefault();
+    const x = e.pageX - filterScrollRef.current.offsetLeft;
+    filterScrollRef.current.scrollLeft = dragScrollLeft.current - (x - dragStartX.current);
+  };
+  const handleMouseUp = () => { isDragging.current = false; };
+
+  const filteredGrouped = useMemo(
+    () => (selectedDate ? grouped.filter(({ date }) => date === selectedDate) : grouped),
+    [grouped, selectedDate],
+  );
 
   if (!journey) return null;
 
@@ -152,8 +189,58 @@ export function JourneyTimelinePage() {
           </div>
         </section>
 
+        {/* 일차 필터 버튼 */}
+        {allDates.length > 0 && (
+          <div
+            ref={filterScrollRef}
+            className="-mx-6 flex gap-2 overflow-x-auto px-6 pb-1 [&::-webkit-scrollbar]:hidden [scrollbar-width:none] cursor-grab active:cursor-grabbing select-none"
+            onMouseDown={handleMouseDown}
+            onMouseMove={handleMouseMove}
+            onMouseUp={handleMouseUp}
+            onMouseLeave={handleMouseUp}
+          >
+            <button
+              type="button"
+              onClick={() => setSelectedDate(null)}
+              className={`shrink-0 rounded-full px-4 py-2 text-[11px] font-black tracking-tight transition active:scale-95 ${
+                selectedDate === null ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-500'
+              }`}
+            >
+              전체
+            </button>
+            {allDates.map((date) => {
+              const dayN = dayNumberFromStart(journey.startDate, date);
+              return (
+                <button
+                  key={date}
+                  type="button"
+                  onClick={() => setSelectedDate(date)}
+                  className={`shrink-0 rounded-full px-4 py-2 text-[11px] font-black tracking-tight transition active:scale-95 ${
+                    selectedDate === date
+                      ? 'bg-slate-900 text-white'
+                      : 'bg-slate-100 text-slate-500'
+                  }`}
+                >
+                  {dayN}일차
+                </button>
+              );
+            })}
+          </div>
+        )}
+
         <section className="space-y-12">
-          {grouped.map(({ date, items }) => {
+          {filteredGrouped.length === 0 && (
+            <div className="flex flex-col items-center gap-4 py-20 text-center">
+              <span className="text-5xl">🧾</span>
+              <div>
+                <p className="text-base font-black text-slate-900">아직 기록된 지출이 없어요</p>
+                <p className="mt-1 text-[13px] font-bold text-slate-400">
+                  영수증을 스캔하거나 직접 입력해보세요
+                </p>
+              </div>
+            </div>
+          )}
+          {filteredGrouped.map(({ date, items }) => {
             const dayN = dayNumberFromStart(journey.startDate, date);
             return (
               <div key={date}>
@@ -215,7 +302,7 @@ export function JourneyTimelinePage() {
                             </p>
                             {isShared ? (
                               <p className="mt-1 text-[10px] font-bold tracking-tighter text-blue-500">
-                                내 몫 {formatLocal(myShare)} {journey.currency}
+                                🏷️ {formatLocal(myShare)} {journey.currency}
                                 <span className="ml-1 text-slate-400">
                                   (약 {formatKRW(myShare * journey.rate)}원)
                                 </span>
