@@ -42,6 +42,7 @@ export function JourneyCreatePage() {
   const [participants, setParticipants] = useState<string[]>(['나']);
   const [newParticipant, setNewParticipant] = useState('');
   const [dates, setDates] = useState({ start: today, end: today });
+  const [budgetKRW, setBudgetKRW] = useState<number | ''>('');
   const [hydratedFromId, setHydratedFromId] = useState<string | null>(null);
 
   // journeyId 바뀌면 hydrate 플래그 리셋 (effect 대신 렌더 중 비교)
@@ -67,10 +68,19 @@ export function JourneyCreatePage() {
     );
     setDates({ start: existingJourney.startDate, end: existingJourney.endDate });
     setParticipants(existingJourney.participants.length ? existingJourney.participants : ['나']);
+    setBudgetKRW(
+      typeof existingJourney.budgetKRW === 'number' && existingJourney.budgetKRW > 0
+        ? existingJourney.budgetKRW
+        : '',
+    );
     setHydratedFromId(existingJourney.id);
   }, [isEdit, existingJourney, hydratedFromId]);
 
+  // 신규 생성에서만 로그인 사용자명을 참가자 1번으로 prepend.
+  // 수정 모드에서는 기존 participants/selfParticipant를 보존해야
+  // 이미 등록된 영수증의 payer/splitWith 식별자가 깨지지 않는다.
   useEffect(() => {
+    if (isEdit) return;
     setParticipants((prev) => {
       const trimmed = authName || '나';
       const list = prev.length ? prev : ['나'];
@@ -79,7 +89,7 @@ export function JourneyCreatePage() {
       }
       return [trimmed, ...list];
     });
-  }, [authName]);
+  }, [authName, isEdit]);
 
   const infer = (text: string) => {
     const t = text.toLowerCase();
@@ -121,7 +131,14 @@ export function JourneyCreatePage() {
     const safeName = name.trim() || destination.trim() || country || '새 여행';
     const rate = effectiveRate();
     const plist = participants.length ? participants : [authName || '나'];
-    const selfN = authName || plist[0] || '나';
+    // 수정 모드: 기존 selfParticipant 유지 (영수증 payer/splitWith와의 일관성).
+    // 신규: 로그인 사용자명을 self로.
+    const selfN = isEdit
+      ? existingJourney?.selfParticipant?.trim() || plist[0] || '나'
+      : authName || plist[0] || '나';
+
+    const budgetValue =
+      typeof budgetKRW === 'number' && budgetKRW > 0 ? Math.round(budgetKRW) : undefined;
 
     if (isEdit && journeyId) {
       await updateJourneyMut.mutateAsync({
@@ -136,6 +153,7 @@ export function JourneyCreatePage() {
           endDate: dates.end,
           participants: plist,
           selfParticipant: selfN,
+          budgetKRW: budgetValue,
         },
       });
       nav(`/journeys/${journeyId}`, { replace: true });
@@ -155,6 +173,7 @@ export function JourneyCreatePage() {
       endDate: dates.end,
       participants: plist,
       selfParticipant: selfN,
+      budgetKRW: budgetValue,
     });
     nav(`/journeys/${id}`);
   };
@@ -237,7 +256,25 @@ export function JourneyCreatePage() {
         </section>
 
         <section className="grid grid-cols-2 gap-4">
-          <div className="col-span-2">
+          <div>
+            <label className="mb-2 block text-[10px] font-black uppercase tracking-widest text-slate-400">
+              목표 예산
+            </label>
+            <div className="flex w-full items-baseline gap-1 rounded-2xl border border-slate-100 bg-slate-50 p-4">
+              <input
+                type="number"
+                inputMode="numeric"
+                min={0}
+                value={budgetKRW}
+                onChange={(e) => setBudgetKRW(e.target.value === '' ? '' : Number(e.target.value))}
+                placeholder="예: 1,000,000"
+                className="w-full min-w-0 bg-transparent text-sm font-bold outline-none placeholder:text-slate-300"
+              />
+              <span className="text-xs font-black text-slate-400">원</span>
+            </div>
+          </div>
+
+          <div>
             <label className="mb-2 block text-[10px] font-black uppercase tracking-widest text-slate-400">
               사용 통화
             </label>
@@ -245,7 +282,7 @@ export function JourneyCreatePage() {
               <select
                 value={currency}
                 onChange={(e) => setCurrency(e.target.value as CurrencyCode)}
-                className="w-full bg-transparent outline-none"
+                className="w-full min-w-0 bg-transparent outline-none"
               >
                 {CURRENCIES.map((c) => (
                   <option key={c.code} value={c.code}>
@@ -253,7 +290,7 @@ export function JourneyCreatePage() {
                   </option>
                 ))}
               </select>
-              <ChevronRight className="ml-2 size-4 text-slate-300" />
+              <ChevronRight className="ml-2 size-4 shrink-0 text-slate-300" />
             </div>
           </div>
         </section>
@@ -266,7 +303,7 @@ export function JourneyCreatePage() {
             <button
               type="button"
               onClick={() => setRateMode('fixed')}
-              className={`rounded-[24px] border-2 p-6 text-center transition-all ${rateMode === 'fixed' ? 'border-blue-600 bg-white shadow-lg shadow-blue-50' : 'border-slate-50 bg-slate-50'}`}
+              className={`rounded-[24px] border p-6 text-center transition-all ${rateMode === 'fixed' ? 'border-blue-600 bg-white shadow-lg shadow-blue-50' : 'border-slate-100 bg-slate-50'}`}
             >
               <div
                 className={`text-base font-black ${rateMode === 'fixed' ? 'text-blue-600' : 'text-slate-400'}`}
@@ -282,7 +319,7 @@ export function JourneyCreatePage() {
             <button
               type="button"
               onClick={() => setRateMode('realtime')}
-              className={`rounded-[24px] border-2 p-6 text-center transition-all ${rateMode === 'realtime' ? 'border-blue-600 bg-white shadow-lg shadow-blue-50' : 'border-slate-50 bg-slate-50'}`}
+              className={`rounded-[24px] border p-6 text-center transition-all ${rateMode === 'realtime' ? 'border-blue-600 bg-white shadow-lg shadow-blue-50' : 'border-slate-100 bg-slate-50'}`}
             >
               <div
                 className={`text-base font-black ${rateMode === 'realtime' ? 'text-blue-600' : 'text-slate-400'}`}
@@ -305,17 +342,21 @@ export function JourneyCreatePage() {
           )}
 
           {rateMode === 'fixed' && (
-            <div className="rounded-[28px] border border-blue-100 bg-blue-50 p-5">
+            <div className="rounded-[28px] border border-blue-100 bg-blue-50/60 p-5">
               <label className="mb-2 block text-[10px] font-black uppercase tracking-widest text-blue-600">
                 고정 환율 (현지 1단위 → KRW)
               </label>
               <div className="flex items-baseline gap-2">
                 <input
                   type="number"
+                  inputMode="decimal"
+                  step="0.01"
+                  min={0}
                   value={fixedRate}
                   onChange={(e) =>
                     setFixedRate(e.target.value === '' ? '' : Number(e.target.value))
                   }
+                  placeholder="예: 9.32"
                   className="w-full border-b-2 border-blue-200 bg-transparent text-3xl font-black text-blue-900 outline-none placeholder:text-blue-200"
                 />
                 <span className="font-black text-blue-600">KRW</span>

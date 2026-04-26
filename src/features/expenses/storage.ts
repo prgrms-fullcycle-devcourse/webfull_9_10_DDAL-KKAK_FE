@@ -1,7 +1,8 @@
 import { MOCK_EXPENSES } from '@/mocks/data';
 import type { Expense } from '@/features/expenses/types';
 
-const KEY = 'tt_expenses_v2';
+// journeys_v4와 함께 expense 캐시도 초기화 (목데이터 재씨드)
+const KEY = 'tt_expenses_v4';
 
 export function loadAllExpenses(): Expense[] {
   try {
