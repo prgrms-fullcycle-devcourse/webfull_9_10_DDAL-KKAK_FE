@@ -5,12 +5,7 @@ import { Fab, FabStack } from '@/components/layout/Fab';
 import { TopBar } from '@/components/layout/TopBar';
 import { useExpensesQuery } from '@/features/expenses/queries';
 import { useJourneyQuery } from '@/features/journeys/queries';
-import {
-  expenseMyShareLocal,
-  sumMySpendKRW,
-  sumMySpendLocal,
-  sumTotalKRW,
-} from '@/features/settlement/calc';
+import { expenseMyShareLocal, sumMySpendKRW, sumMySpendLocal } from '@/features/settlement/calc';
 import { dateKeyOf, timeLabelOf } from '@/lib/datetime';
 import { formatKRW, formatLocal } from '@/lib/money';
 
@@ -84,7 +79,6 @@ export function JourneyTimelinePage() {
 
   if (!journey) return null;
 
-  const totalKRW = sumTotalKRW(journey, expenses);
   const mySpendLocal = sumMySpendLocal(journey, expenses);
   const mySpendKRW = sumMySpendKRW(journey, expenses);
 
@@ -210,19 +204,6 @@ export function JourneyTimelinePage() {
                 </div>
               );
             })()}
-
-          {/* 하단 보조 정보 */}
-          <div className="mt-5 border-t border-white/10 pt-4">
-            <div className="flex items-center justify-between text-[11px] font-bold">
-              <span className="text-white/40">영수증 합계</span>
-              <span>
-                <span className="text-white/70">{formatKRW(totalKRW)}원</span>
-                <span className="ml-1 text-[10px] font-bold text-white/30">
-                  (약 {formatLocal(totalKRW / journey.rate)} {journey.currency})
-                </span>
-              </span>
-            </div>
-          </div>
         </section>
 
         {/* 일차 필터 버튼 */}
@@ -278,6 +259,10 @@ export function JourneyTimelinePage() {
           )}
           {filteredGrouped.map(({ date, items }) => {
             const dayN = dayNumberFromStart(journey.startDate, date);
+            const dayMySpendLocal = items.reduce(
+              (acc, e) => acc + expenseMyShareLocal(journey, e),
+              0,
+            );
             return (
               <div key={date}>
                 <div className="mb-8 flex items-center gap-3">
@@ -288,6 +273,12 @@ export function JourneyTimelinePage() {
                     {date.replaceAll('-', '.')}
                   </span>
                   <div className="h-px flex-1 bg-slate-100" />
+                  <span className="text-[11px] font-black tracking-tight text-slate-500">
+                    {formatLocal(dayMySpendLocal)}
+                    <span className="ml-0.5 text-[10px] font-bold text-slate-400">
+                      {journey.currency} 사용
+                    </span>
+                  </span>
                 </div>
 
                 <div className="space-y-10">
