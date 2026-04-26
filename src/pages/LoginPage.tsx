@@ -27,7 +27,7 @@ export function LoginPage() {
               login({ id: 'demo-user', name: '영아' });
               nav(next, { replace: true });
             }}
-            className="w-full rounded-2xl bg-yellow-300 py-4 text-sm font-black text-slate-900 active:scale-[0.99]"
+            className="w-full rounded-2xl bg-yellow-300 py-4 text-sm font-black text-slate-900 cursor-pointer active:scale-[0.99]"
           >
             카카오로 1초 만에 시작
           </button>
@@ -37,7 +37,7 @@ export function LoginPage() {
               login({ id: 'demo-user', name: '영아' });
               nav(next, { replace: true });
             }}
-            className="w-full rounded-2xl bg-slate-900 py-4 text-sm font-black text-white active:scale-[0.99]"
+            className="w-full rounded-2xl bg-slate-900 py-4 text-sm font-black text-white cursor-pointer active:scale-[0.99]"
           >
             구글로 시작
           </button>

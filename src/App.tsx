@@ -1,5 +1,6 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { PhoneFrame } from '@/components/layout/PhoneFrame';
+import { ScrollToTop } from '@/components/layout/ScrollToTop';
 import { ProtectedRoute } from '@/routes/ProtectedRoute';
 
 import { LoginPage } from '@/pages/LoginPage';
@@ -18,6 +19,7 @@ export default function App() {
   return (
     <div className="min-h-dvh">
       <PhoneFrame>
+        <ScrollToTop />
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route element={<ProtectedRoute />}>

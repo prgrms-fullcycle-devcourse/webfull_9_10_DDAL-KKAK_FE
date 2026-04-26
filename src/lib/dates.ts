@@ -29,3 +29,23 @@ export function getJourneyPhase(startDate: string, endDate: string): JourneyPhas
   if (s.tone === 'active') return 'ongoing';
   return 'past';
 }
+
+/** 여행 총 일수 (시작일/종료일 포함) */
+export function getTripDays(startDate: string, endDate: string): number {
+  const s = new Date(startDate);
+  const e = new Date(endDate);
+  if (Number.isNaN(s.getTime()) || Number.isNaN(e.getTime())) return 1;
+  const diff = Math.floor((e.getTime() - s.getTime()) / 86_400_000) + 1;
+  return Math.max(1, diff);
+}
+
+/** 여행 시작일부터 오늘까지 경과 일수 (1일차부터). 시작 전이면 0, 종료 후면 총 일수. */
+export function getElapsedDays(startDate: string, endDate: string): number {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const s = new Date(startDate);
+  const e = new Date(endDate);
+  if (today < s) return 0;
+  if (today > e) return getTripDays(startDate, endDate);
+  return Math.floor((today.getTime() - s.getTime()) / 86_400_000) + 1;
+}

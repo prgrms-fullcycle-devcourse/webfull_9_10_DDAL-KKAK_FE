@@ -152,7 +152,11 @@ export function ExpenseForm({
       <TopBar
         title={
           <span>
-            {mode === 'edit' ? '내역 수정' : mode === 'ocr' ? '영수증 확인' : '내역 추가'}
+            {mode === 'edit'
+              ? '지출 내역 수정'
+              : mode === 'ocr'
+                ? '영수증 확인'
+                : '지출 내역 추가'}
           </span>
         }
         onBack={onCanceled}
