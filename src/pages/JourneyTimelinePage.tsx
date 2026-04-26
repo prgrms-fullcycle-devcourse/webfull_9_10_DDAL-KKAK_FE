@@ -102,10 +102,23 @@ export function JourneyTimelinePage() {
 
   const tripDateRange = `${journey.startDate.replaceAll('-', '.')} ~ ${journey.endDate.replaceAll('-', '.')}`;
 
+  const statusBadge = {
+    active:  { label: '여행 중', className: 'bg-green-100 text-green-600' },
+    planned: { label: '예정',    className: 'bg-blue-100 text-blue-600' },
+    ended:   { label: '종료',    className: 'bg-slate-100 text-slate-400' },
+  }[journey.status];
+
   return (
     <div className="relative min-h-dvh bg-white pb-20">
       <TopBar
-        title={journey.name}
+        title={
+          <span className="flex items-center gap-2">
+            {journey.name}
+            <span className={`rounded-full px-2 py-0.5 text-[10px] font-black tracking-tight ${statusBadge.className}`}>
+              {statusBadge.label}
+            </span>
+          </span>
+        }
         subtitle={tripDateRange}
         backTo="/"
         right={
