@@ -14,6 +14,7 @@ export const MOCK_JOURNEYS: Journey[] = [
     endDate: '2026-04-25',
     participants: ['나', '지수', '민호'],
     selfParticipant: '나',
+    budgetKRW: 1_000_000,
   },
 ];
 

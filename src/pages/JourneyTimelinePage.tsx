@@ -6,15 +6,23 @@ import { TopBar } from '@/components/layout/TopBar';
 import { useExpensesQuery } from '@/features/expenses/queries';
 import { useJourneyQuery } from '@/features/journeys/queries';
 import {
+  calcSettlement,
   expenseMyShareLocal,
   ledgerSelfName,
   sumMySpendKRW,
   sumMySpendLocal,
   sumTotalKRW,
-  sumTotalLocal,
 } from '@/features/settlement/calc';
 import { dateKeyOf, timeLabelOf } from '@/lib/datetime';
 import { formatKRW, formatLocal } from '@/lib/money';
+
+/** 'YYYY-MM-DD' wall-clock 기준 일차 계산 (1일차부터). */
+function dayNumberFromStart(startDateKey: string, dateKey: string): number {
+  const start = new Date(`${startDateKey}T00:00:00Z`).getTime();
+  const cur = new Date(`${dateKey}T00:00:00Z`).getTime();
+  if (Number.isNaN(start) || Number.isNaN(cur)) return 1;
+  return Math.max(1, Math.floor((cur - start) / 86_400_000) + 1);
+}
 
 export function JourneyTimelinePage() {
   const nav = useNavigate();
@@ -39,21 +47,29 @@ export function JourneyTimelinePage() {
 
   if (!journey) return null;
 
-  const totalLocal = sumTotalLocal(expenses);
   const totalKRW = sumTotalKRW(journey, expenses);
   const mySpendLocal = sumMySpendLocal(journey, expenses);
   const mySpendKRW = sumMySpendKRW(journey, expenses);
+
+  // 정산 요약: 내 net = 낸돈 − 부담할몫
   const selfName = ledgerSelfName(journey);
+  const { nets } = calcSettlement(journey, expenses);
+  const myNetLocal = nets.find((n) => n.person === selfName)?.netLocal ?? 0;
+  const myNetKRW = Math.round(myNetLocal * journey.rate);
+  const settleTone: 'credit' | 'debit' | 'none' =
+    myNetKRW > 0 ? 'credit' : myNetKRW < 0 ? 'debit' : 'none';
+  const settleLabel =
+    settleTone === 'credit' ? '받을 돈' : settleTone === 'debit' ? '보낼 돈' : '정산 완료';
+  const settleAmountAbs = Math.abs(myNetKRW);
+  const settleAmountAbsLocal = Math.abs(myNetLocal);
+
+  const tripDateRange = `${journey.startDate.replaceAll('-', '.')} ~ ${journey.endDate.replaceAll('-', '.')}`;
 
   return (
     <div className="relative min-h-dvh bg-white pb-20">
       <TopBar
         title={journey.name}
-        subtitle={
-          journey.rateMode === 'fixed'
-            ? `고정 환율 · 1${journey.currency} = ${journey.rate}원`
-            : '실시간 환율 (표시용 기준 적용)'
-        }
+        subtitle={tripDateRange}
         backTo="/"
         right={
           <div className="flex items-center gap-1">
@@ -80,130 +96,148 @@ export function JourneyTimelinePage() {
       <main className="space-y-10 px-6 py-8">
         <section className="rounded-[32px] bg-slate-900 p-6 text-white shadow-xl">
           <div className="mb-6 flex items-center justify-between">
-            <div className="flex items-center text-[10px] font-black uppercase tracking-widest text-slate-400">
-              총 지출 현황
+            <div className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-white/50">
+              <span aria-hidden>👥</span>
+              <span>실시간 정산 현황</span>
             </div>
             <button
               type="button"
               onClick={() => nav(`/journeys/${journey.id}/report`)}
-              className="rounded-full bg-white/10 px-3 py-1 text-[10px] font-black uppercase tracking-tighter"
+              className="cursor-pointer rounded-full bg-white/10 px-3 py-1 text-[10px] font-black uppercase tracking-tighter active:scale-95"
             >
-              결산표
+              결산표 보기
             </button>
           </div>
 
-          <div className="space-y-2">
-            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">
-              지금까지 내가 쓴 돈
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-widest text-white/50">
+              {settleLabel}
             </p>
-            <div className="flex items-baseline gap-2">
-              <h3 className="text-4xl font-black">{formatKRW(mySpendKRW)}</h3>
-              <span className="text-lg font-bold">KRW</span>
-            </div>
-            <p className="text-[10px] font-bold text-white/40">
-              {formatLocal(mySpendLocal)} {journey.currency} · 공동(1/n)은 내 몫만, 개인은 결제자가
-              「{selfName}」일 때만 포함
-            </p>
-            <p className="text-[10px] font-bold text-white/30">
-              영수증 전체 합(참고): {formatKRW(totalKRW)}원 / {formatLocal(totalLocal)}{' '}
-              {journey.currency}
-            </p>
+            {settleTone === 'none' ? (
+              <h3 className="mt-2 text-2xl font-black text-white/60">정산할 금액이 없어요</h3>
+            ) : (
+              <>
+                <div className="mt-2 flex items-baseline gap-2">
+                  <h3 className="text-4xl font-black tracking-tight text-white">
+                    {formatKRW(settleAmountAbs)}
+                  </h3>
+                  <span className="text-lg font-bold text-white/70">KRW</span>
+                </div>
+                <p className="mt-1 text-[10px] font-bold text-white/40">
+                  ≈ {formatLocal(settleAmountAbsLocal)} {journey.currency}
+                </p>
+              </>
+            )}
+          </div>
 
-            <div className="mt-5 rounded-2xl border border-white/10 bg-white/5 p-4">
-              <p className="text-[10px] font-black uppercase tracking-widest text-white/50">
-                지금까지 내가 쓴 돈 (현지 기준)
-              </p>
-              <p className="mt-2 text-2xl font-black tracking-tight text-emerald-300">
-                {formatLocal(mySpendLocal)}
-                <span className="ml-1 text-sm font-bold text-emerald-200/90">
-                  {journey.currency}
+          <div className="mt-5 space-y-2 border-t border-white/10 pt-4">
+            <div className="flex items-center justify-between text-xs font-bold">
+              <span className="text-white/50">내 지출</span>
+              <span className="text-white/70">
+                <span className="font-black text-white">{formatKRW(mySpendKRW)}원</span>
+                <span className="ml-1 text-[10px] font-bold text-white/40">
+                  ({formatLocal(mySpendLocal)} {journey.currency})
                 </span>
-              </p>
-              <p className="mt-1 text-[10px] font-bold text-white/45">
-                약 {formatKRW(mySpendLocal * journey.rate)}원
-              </p>
+              </span>
+            </div>
+            <div className="flex items-center justify-between text-[11px] font-bold">
+              <span className="text-white/40">영수증 합</span>
+              <span className="text-white/55">
+                <span className="text-white/70">{formatKRW(totalKRW)}원</span>
+                <span className="ml-1 text-[10px] font-bold text-white/30">
+                  (약 {formatLocal(totalKRW / journey.rate)} {journey.currency})
+                </span>
+              </span>
             </div>
           </div>
         </section>
 
         <section className="space-y-12">
-          {grouped.map(({ date, items }) => (
-            <div key={date}>
-              <div className="mb-8 flex items-center gap-3">
-                <span className="rounded-lg bg-slate-100 px-2.5 py-1 text-[10px] font-black uppercase tracking-widest text-slate-900">
-                  {date.replaceAll('-', '.')}
-                </span>
-                <div className="h-px flex-1 bg-slate-100" />
-              </div>
+          {grouped.map(({ date, items }) => {
+            const dayN = dayNumberFromStart(journey.startDate, date);
+            return (
+              <div key={date}>
+                <div className="mb-8 flex items-center gap-3">
+                  <span className="rounded-lg bg-slate-100 px-2.5 py-1 text-[11px] font-black tracking-tight text-slate-900">
+                    {dayN}일차
+                  </span>
+                  <span className="text-[11px] font-bold tracking-tight text-slate-400">
+                    {date.replaceAll('-', '.')}
+                  </span>
+                  <div className="h-px flex-1 bg-slate-100" />
+                </div>
 
-              <div className="space-y-10">
-                {items.map((e) => {
-                  const myShare = expenseMyShareLocal(journey, e);
-                  const isShared = e.splitMode === 'shared';
-                  const splitN = isShared
-                    ? Math.max(e.splitWith?.length ?? journey.participants.length, 1)
-                    : null;
-                  return (
-                    <div
-                      key={e.id}
-                      onClick={() => nav(`/journeys/${journey.id}/expenses/${e.id}/edit`)}
-                      className="group -mx-2 cursor-pointer rounded-2xl px-2 py-2 transition active:bg-slate-50"
-                    >
-                      <div className="mb-2 flex items-start justify-between">
-                        <div className="flex items-center gap-3">
-                          <span className="text-3xl drop-shadow-sm">{e.emoji}</span>
-                          <div>
-                            <div className="mb-1 flex items-center gap-2">
-                              <h4 className="text-base font-black leading-none text-slate-900">
-                                {e.storeName}
-                              </h4>
-                              <span
-                                className={`rounded px-1.5 py-0.5 text-[8px] font-black tracking-tighter ${isShared ? 'bg-orange-100 text-orange-600' : 'bg-slate-100 text-slate-500'}`}
-                              >
-                                {isShared
-                                  ? `공동${splitN != null ? ` · ${splitN}명 1/n` : ''}`
-                                  : '개인'}
-                              </span>
-                              <span className="rounded bg-slate-50 px-1.5 py-0.5 text-[8px] font-black tracking-tighter text-slate-400">
-                                {(e.method ?? 'card') === 'cash' ? '현금' : '카드'}
-                              </span>
+                <div className="space-y-10">
+                  {items.map((e) => {
+                    const myShare = expenseMyShareLocal(journey, e);
+                    const isShared = e.splitMode === 'shared';
+                    const splitN = isShared
+                      ? Math.max(e.splitWith?.length ?? journey.participants.length, 1)
+                      : null;
+                    return (
+                      <div
+                        key={e.id}
+                        onClick={() => nav(`/journeys/${journey.id}/expenses/${e.id}/edit`)}
+                        className="group -mx-2 cursor-pointer rounded-2xl px-2 py-2 transition active:bg-slate-50"
+                      >
+                        <div className="mb-2 flex items-start justify-between">
+                          <div className="flex items-center gap-3">
+                            <span className="text-3xl drop-shadow-sm">{e.emoji}</span>
+                            <div>
+                              <div className="mb-1 flex items-center gap-2">
+                                <h4 className="text-base font-black leading-none text-slate-900">
+                                  {e.storeName}
+                                </h4>
+                                <span
+                                  className={`rounded px-1.5 py-0.5 text-[8px] font-black tracking-tighter ${isShared ? 'bg-orange-100 text-orange-600' : 'bg-slate-100 text-slate-500'}`}
+                                >
+                                  {isShared
+                                    ? `공동${splitN != null ? ` · ${splitN}명 1/n` : ''}`
+                                    : '개인'}
+                                </span>
+                                <span className="rounded bg-slate-50 px-1.5 py-0.5 text-[8px] font-black tracking-tighter text-slate-400">
+                                  {(e.method ?? 'card') === 'cash' ? '현금' : '카드'}
+                                </span>
+                              </div>
+                              <p className="flex items-center text-[10px] font-bold uppercase tracking-tighter text-slate-300">
+                                <Clock className="mr-1 size-3" /> {timeLabelOf(e.paidAt)} •{' '}
+                                <UserIcon className="mx-1 size-3" /> 결제자: {e.payer}
+                              </p>
                             </div>
-                            <p className="flex items-center text-[10px] font-bold uppercase tracking-tighter text-slate-300">
-                              <Clock className="mr-1 size-3" /> {timeLabelOf(e.paidAt)} •{' '}
-                              <UserIcon className="mx-1 size-3" /> 결제자: {e.payer}
+                          </div>
+                          <div className="text-right">
+                            <p className="text-lg font-black leading-none tracking-tight text-slate-900">
+                              {formatLocal(e.amountLocal)}
+                              <span className="ml-0.5 text-xs font-bold">{journey.currency}</span>
                             </p>
+                            <p className="mt-1 text-[10px] font-bold tracking-tighter text-slate-300">
+                              약 {formatKRW(e.amountLocal * journey.rate)}원
+                            </p>
+                            {isShared ? (
+                              <p className="mt-1 text-[10px] font-bold tracking-tighter text-blue-500">
+                                내 몫 {formatLocal(myShare)} {journey.currency}
+                                <span className="ml-1 text-slate-400">
+                                  (약 {formatKRW(myShare * journey.rate)}원)
+                                </span>
+                              </p>
+                            ) : null}
                           </div>
                         </div>
-                        <div className="text-right">
-                          <p className="text-lg font-black leading-none tracking-tight text-slate-900">
-                            {formatLocal(e.amountLocal)}
-                            <span className="ml-0.5 text-xs font-bold">{journey.currency}</span>
-                          </p>
-                          <p className="mt-1 text-[10px] font-bold tracking-tighter text-slate-300">
-                            약 {formatKRW(e.amountLocal * journey.rate)}원
-                          </p>
-                          {isShared ? (
-                            <p className="mt-1 text-[10px] font-black text-blue-600">
-                              내 몫 {formatLocal(myShare)} {journey.currency} (약{' '}
-                              {formatKRW(myShare * journey.rate)}원)
-                            </p>
-                          ) : null}
-                        </div>
-                      </div>
 
-                      {e.comment ? (
-                        <div className="ml-11 rounded-2xl border-l-4 border-blue-100 bg-slate-50 px-4 py-3">
-                          <p className="text-sm font-medium leading-relaxed tracking-tight text-slate-500">
-                            "{e.comment}"
-                          </p>
-                        </div>
-                      ) : null}
-                    </div>
-                  );
-                })}
+                        {e.comment ? (
+                          <div className="ml-11 rounded-2xl border-l-4 border-blue-100 bg-slate-50 px-4 py-3">
+                            <p className="text-sm font-medium leading-relaxed tracking-tight text-slate-500">
+                              "{e.comment}"
+                            </p>
+                          </div>
+                        ) : null}
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </section>
       </main>
 

@@ -3,13 +3,13 @@ import { useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { BottomNav } from '@/components/layout/BottomNav';
 import { Fab, FabStack } from '@/components/layout/Fab';
-import { getJourneyPhase, getTripStatusLabel } from '@/lib/dates';
-import { formatKRW } from '@/lib/money';
+import { getElapsedDays, getJourneyPhase, getTripDays, getTripStatusLabel } from '@/lib/dates';
+import { formatKRW, formatLocal } from '@/lib/money';
 import type { Journey } from '@/features/journeys/types';
 import type { Expense } from '@/features/expenses/types';
 import { useAllExpensesQuery } from '@/features/expenses/queries';
 import { useJourneysQuery } from '@/features/journeys/queries';
-import { sumMySpendKRW, sumTotalKRW } from '@/features/settlement/calc';
+import { calcSettlement, ledgerSelfName, sumMySpendKRW } from '@/features/settlement/calc';
 
 function JourneyCard({
   j,
@@ -21,9 +21,59 @@ function JourneyCard({
   onClick: () => void;
 }) {
   const status = getTripStatusLabel(j.startDate, j.endDate);
+  const phase = getJourneyPhase(j.startDate, j.endDate);
   const tripExpenses = expenses.filter((e) => e.journeyId === j.id);
   const spentKRW = sumMySpendKRW(j, tripExpenses);
-  const totalReceiptKRW = sumTotalKRW(j, tripExpenses);
+
+  const hasBudget = typeof j.budgetKRW === 'number' && j.budgetKRW > 0;
+  const budgetKRW = hasBudget ? (j.budgetKRW as number) : 0;
+  const tripDays = getTripDays(j.startDate, j.endDate);
+  const elapsedDays = getElapsedDays(j.startDate, j.endDate);
+  const expenseCount = tripExpenses.length;
+
+  const insight = (() => {
+    if (phase === 'ongoing') {
+      const days = Math.max(elapsedDays, 1);
+      const avg = Math.round(spentKRW / days);
+      return expenseCount === 0
+        ? '아직 기록된 지출이 없어요'
+        : `일평균 ${formatKRW(avg)}원 사용 중`;
+    }
+    if (phase === 'upcoming') {
+      if (hasBudget) {
+        const perDay = Math.round(budgetKRW / tripDays);
+        return `하루 ${formatKRW(perDay)}원 예산`;
+      }
+      return `${tripDays}일 일정 · ${j.participants.length}명`;
+    }
+    // past
+    if (expenseCount === 0) return '기록된 지출이 없어요';
+    const avg = Math.round(spentKRW / tripDays);
+    return `지출 ${expenseCount}건 · 일평균 ${formatKRW(avg)}원`;
+  })();
+  const isOver = hasBudget && spentKRW > budgetKRW;
+  const remainKRW = Math.max(budgetKRW - spentKRW, 0);
+  const overKRW = Math.max(spentKRW - budgetKRW, 0);
+  const usedRatio = hasBudget ? Math.min(Math.round((spentKRW / budgetKRW) * 100), 999) : 0;
+  const progressPct = hasBudget ? Math.min(usedRatio, 100) : 0;
+
+  // 정산 요약: 내 순 정산액(netLocal = 낸돈 − 부담할몫) → KRW 반올림
+  // net > 0: 받을 돈, net < 0: 보낼 돈, net ≈ 0: 정산 완료
+  const myName = ledgerSelfName(j);
+  const { nets } = calcSettlement(j, tripExpenses);
+  const myNetLocal = nets.find((n) => n.person === myName)?.netLocal ?? 0;
+  const myNetKRW = Math.round(myNetLocal * j.rate);
+  const settleTone: 'credit' | 'debit' | 'none' =
+    myNetKRW > 0 ? 'credit' : myNetKRW < 0 ? 'debit' : 'none';
+  const settleLabel =
+    settleTone === 'credit' ? '받을 돈' : settleTone === 'debit' ? '보낼 돈' : '정산 완료';
+  const settleColor =
+    settleTone === 'credit'
+      ? 'text-blue-600'
+      : settleTone === 'debit'
+        ? 'text-[#FF4D4D]'
+        : 'text-slate-400';
+  const settleAmountAbs = Math.abs(myNetKRW);
 
   const statusChip =
     status.tone === 'active'
@@ -36,7 +86,7 @@ function JourneyCard({
     <button
       type="button"
       onClick={onClick}
-      className="w-full rounded-[32px] border border-slate-100 bg-white p-5 text-left shadow-sm active:scale-[0.99]"
+      className="w-full cursor-pointer rounded-[32px] border border-slate-100 bg-white p-5 text-left shadow-sm active:scale-[0.99]"
     >
       <div className="mb-4 flex items-start justify-between">
         <div className="flex items-center gap-2">
@@ -54,19 +104,90 @@ function JourneyCard({
 
       <div className="mb-6">
         <h3 className="mb-1 text-xl font-black tracking-tight">{j.name}</h3>
-        <p className="text-xs font-bold text-slate-400">
-          현지 지갑(환전/충전) + 지출 기록으로만 관리
-        </p>
+        <p className="text-xs font-bold text-slate-400">{insight}</p>
       </div>
 
-      <div className="mb-6 rounded-2xl border border-dashed border-slate-200 bg-slate-50/40 px-4 py-3">
-        <p className="text-[11px] font-bold text-slate-500">
-          내 부담 지출 <span className="font-black text-slate-900">{formatKRW(spentKRW)}원</span>
-        </p>
-        <p className="mt-1 text-[10px] font-bold text-slate-400">
-          영수증 전체 합(참고) {formatKRW(totalReceiptKRW)}원
-        </p>
-      </div>
+      {hasBudget ? (
+        <div
+          className={`mb-6 rounded-2xl border p-4 ${
+            isOver ? 'border-red-100 bg-red-50/60' : 'border-blue-100 bg-blue-50/60'
+          }`}
+        >
+          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+            {isOver ? '초과 지출' : '남은 예산'}
+          </p>
+          <p
+            className={`mt-1 text-2xl font-black tracking-tight ${
+              isOver ? 'text-[#FF4D4D]' : 'text-blue-600'
+            }`}
+          >
+            {formatKRW(isOver ? overKRW : remainKRW)}
+            <span className="ml-1 text-sm font-black text-slate-400">원</span>
+          </p>
+          <p className="mt-1 text-[10px] font-bold text-slate-400">
+            ≈ {formatLocal((isOver ? overKRW : remainKRW) / j.rate)} {j.currency}
+          </p>
+
+          <div className="mt-4">
+            <div className="mb-1.5 flex items-center justify-between">
+              <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                예산 사용 현황
+              </span>
+              <span
+                className={`text-[11px] font-black ${
+                  isOver
+                    ? 'text-[#FF4D4D]'
+                    : usedRatio >= 80
+                      ? 'text-orange-500'
+                      : 'text-blue-600'
+                }`}
+              >
+                {usedRatio}%
+              </span>
+            </div>
+            <div className="h-2 w-full overflow-hidden rounded-full bg-white">
+              <div
+                className={`h-full rounded-full transition-all ${
+                  isOver
+                    ? 'bg-[#FF4D4D]'
+                    : usedRatio >= 80
+                      ? 'bg-orange-500'
+                      : 'bg-blue-600'
+                }`}
+                style={{ width: `${progressPct}%` }}
+              />
+            </div>
+            <div className="mt-2 flex items-center justify-between text-[10px] font-bold text-slate-500">
+              <span>
+                <span
+                  className={`font-black ${isOver ? 'text-[#FF4D4D]' : 'text-slate-700'}`}
+                >
+                  {formatKRW(spentKRW)}원
+                </span>{' '}
+                사용
+              </span>
+              <span>목표 {formatKRW(budgetKRW)}원</span>
+            </div>
+            <div className="mt-1 flex items-center justify-between text-[10px] font-bold text-slate-300">
+              <span>
+                약 {formatLocal(spentKRW / j.rate)} {j.currency}
+              </span>
+              <span>
+                약 {formatLocal(budgetKRW / j.rate)} {j.currency}
+              </span>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="mb-6 rounded-2xl border border-dashed border-slate-200 bg-slate-50/40 px-4 py-3">
+          <p className="text-[11px] font-bold text-slate-500">
+            내 지출액 <span className="font-black text-slate-900">{formatKRW(spentKRW)}원</span>
+            <span className="ml-1 text-[10px] font-bold text-slate-400">
+              (약 {formatLocal(spentKRW / j.rate)} {j.currency})
+            </span>
+          </p>
+        </div>
+      )}
 
       <div className="flex items-center justify-between border-t border-slate-100 pt-4">
         <div className="flex -space-x-2">
@@ -81,9 +202,11 @@ function JourneyCard({
         </div>
         <div className="text-right">
           <p className="mb-0.5 text-[10px] font-black uppercase tracking-widest text-slate-300">
-            총 지출
+            정산 요약
           </p>
-          <p className="text-xs font-black text-slate-900">{formatKRW(spentKRW)}원</p>
+          <p className={`text-xs font-black ${settleColor}`}>
+            {settleTone === 'none' ? settleLabel : `${settleLabel} ${formatKRW(settleAmountAbs)}원`}
+          </p>
         </div>
       </div>
     </button>
@@ -156,9 +279,13 @@ export function HomePage() {
           <br />
           <span className="text-blue-600">기록은 틱(Tick)</span>이 할게요.
         </h1>
-        <div className="grid size-10 place-items-center rounded-full border border-slate-200 bg-white shadow-sm">
+        <Link
+          to="/settings"
+          aria-label="설정"
+          className="grid size-10 place-items-center rounded-full border border-slate-200 bg-white shadow-sm active:scale-95"
+        >
           <User className="size-5 text-slate-400" />
-        </div>
+        </Link>
       </header>
 
       <main className="px-6 pb-6 pt-8">
