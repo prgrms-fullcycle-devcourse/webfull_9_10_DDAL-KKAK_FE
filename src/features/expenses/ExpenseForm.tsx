@@ -42,6 +42,70 @@ export function ExpenseForm({
 
   // ── state ──
   const [emoji, setEmoji] = useState('🍚');
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+
+  const EMOJI_LIST = [
+    '🍜',
+    '🍣',
+    '🍕',
+    '🍔',
+    '🌮',
+    '🍱',
+    '🥗',
+    '🍰',
+    '🍩',
+    '🧁',
+    '🍺',
+    '🍵',
+    '☕',
+    '🥤',
+    '🧃',
+    '🍶',
+    '🥂',
+    '🍷',
+    '🧋',
+    '🍦',
+    '🛍️',
+    '👗',
+    '👟',
+    '💄',
+    '🎒',
+    '⌚',
+    '📱',
+    '💊',
+    '🧴',
+    '🪥',
+    '🚕',
+    '🚌',
+    '🚇',
+    '✈️',
+    '🚂',
+    '🚢',
+    '🛵',
+    '🚁',
+    '🚡',
+    '🛺',
+    '🏨',
+    '🏖️',
+    '🎡',
+    '🎭',
+    '🏛️',
+    '🎬',
+    '🎮',
+    '🎵',
+    '🎨',
+    '🏄',
+    '💰',
+    '🧾',
+    '🎁',
+    '🌸',
+    '🗺️',
+    '📸',
+    '🔑',
+    '🧳',
+    '⛽',
+    '🏥',
+  ];
   const [storeName, setStoreName] = useState('');
   const [amountLocal, setAmountLocal] = useState<number | ''>('');
   const [paidAt, setPaidAt] = useState(() => nowLocalIso());
@@ -152,11 +216,7 @@ export function ExpenseForm({
       <TopBar
         title={
           <span>
-            {mode === 'edit'
-              ? '지출 내역 수정'
-              : mode === 'ocr'
-                ? '영수증 확인'
-                : '지출 내역 추가'}
+            {mode === 'edit' ? '지출 내역 수정' : mode === 'ocr' ? '영수증 확인' : '지출 내역 추가'}
           </span>
         }
         onBack={onCanceled}
@@ -172,18 +232,45 @@ export function ExpenseForm({
         )}
 
         {/* 이모지 + 가게명 */}
-        <section className="grid grid-cols-[auto_1fr] gap-3">
-          <input
-            value={emoji}
-            onChange={(e) => setEmoji(e.target.value.slice(0, 2))}
-            className="size-14 rounded-2xl border border-slate-100 bg-slate-50 text-center text-2xl"
-          />
-          <input
-            value={storeName}
-            onChange={(e) => setStoreName(e.target.value)}
-            placeholder="가게명"
-            className="rounded-2xl border border-slate-100 bg-slate-50 px-4 text-sm font-bold outline-none focus:border-blue-500"
-          />
+        <section className="space-y-2">
+          <div className="grid grid-cols-[auto_1fr] gap-3">
+            <button
+              type="button"
+              onClick={() => setShowEmojiPicker((v) => !v)}
+              className={`size-14 rounded-2xl border text-2xl transition active:scale-95 ${
+                showEmojiPicker ? 'border-blue-400 bg-blue-50' : 'border-slate-100 bg-slate-50'
+              }`}
+            >
+              {emoji}
+            </button>
+            <input
+              value={storeName}
+              onChange={(e) => setStoreName(e.target.value)}
+              placeholder="가게명"
+              className="rounded-2xl border border-slate-100 bg-slate-50 px-4 text-sm font-bold outline-none focus:border-blue-500"
+            />
+          </div>
+          {showEmojiPicker && (
+            <div className="rounded-2xl border border-slate-100 bg-slate-50 p-3">
+              <div className="grid grid-cols-10 gap-1">
+                {EMOJI_LIST.map((e) => (
+                  <button
+                    key={e}
+                    type="button"
+                    onClick={() => {
+                      setEmoji(e);
+                      setShowEmojiPicker(false);
+                    }}
+                    className={`flex items-center justify-center rounded-xl py-1.5 text-xl transition active:scale-90 ${
+                      emoji === e ? 'bg-blue-100' : 'hover:bg-slate-100'
+                    }`}
+                  >
+                    {e}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </section>
 
         {/* 금액 */}
