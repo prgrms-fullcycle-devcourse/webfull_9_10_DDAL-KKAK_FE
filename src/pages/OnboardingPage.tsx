@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 const SLIDES = [
@@ -48,12 +48,12 @@ export function OnboardingPage() {
   };
 
   // 터치 스와이프
-  let touchStartX = 0;
+  const touchStartX = useRef(0);
   const handleTouchStart = (e: React.TouchEvent) => {
-    touchStartX = e.touches[0].clientX;
+    touchStartX.current = e.touches[0].clientX;
   };
   const handleTouchEnd = (e: React.TouchEvent) => {
-    const diff = touchStartX - e.changedTouches[0].clientX;
+    const diff = touchStartX.current - e.changedTouches[0].clientX;
     if (diff > 50 && !isLast) setCurrent((v) => v + 1);
     if (diff < -50 && current > 0) setCurrent((v) => v - 1);
   };

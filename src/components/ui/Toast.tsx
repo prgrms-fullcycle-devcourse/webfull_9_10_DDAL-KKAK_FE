@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 
 interface ToastItem {
   id: number;
@@ -6,33 +6,17 @@ interface ToastItem {
   type: 'error' | 'success' | 'info';
 }
 
-export function useToast() {
-  const [toasts, setToasts] = useState<ToastItem[]>([]);
-  const counter = useRef(0);
-
-  const showToast = useCallback((message: string, type: ToastItem['type'] = 'error') => {
-    const id = ++counter.current;
-    setToasts((prev) => [...prev, { id, message, type }]);
-    setTimeout(() => {
-      setToasts((prev) => prev.filter((t) => t.id !== id));
-    }, 2500);
-  }, []);
-
-  const ToastPortal = useCallback(
-    () => (
-      <div className="pointer-events-none fixed bottom-28 left-0 right-0 z-50 flex flex-col items-center gap-2 px-6">
-        {toasts.map((t) => (
-          <ToastItem key={t.id} toast={t} />
-        ))}
-      </div>
-    ),
-    [toasts],
+export function ToastPortal({ toasts }: { toasts: ToastItem[] }) {
+  return (
+    <div className="pointer-events-none fixed bottom-28 left-0 right-0 z-50 flex flex-col items-center gap-2 px-6">
+      {toasts.map((t) => (
+        <ToastBubble key={t.id} toast={t} />
+      ))}
+    </div>
   );
-
-  return { showToast, ToastPortal };
 }
 
-function ToastItem({ toast }: { toast: ToastItem }) {
+function ToastBubble({ toast }: { toast: ToastItem }) {
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {

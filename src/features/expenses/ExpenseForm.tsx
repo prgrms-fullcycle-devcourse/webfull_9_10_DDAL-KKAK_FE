@@ -8,7 +8,8 @@ import {
   useUpdateExpenseMutation,
 } from '@/features/expenses/queries';
 import { TopBar } from '@/components/layout/TopBar';
-import { useToast } from '@/components/ui/Toast';
+import { ToastPortal } from '@/components/ui/Toast';
+import { useToast } from '@/components/ui/useToast';
 import { nowLocalIso, toStoredWallClock } from '@/lib/datetime';
 
 type Mode = 'create' | 'edit' | 'ocr';
@@ -40,7 +41,7 @@ export function ExpenseForm({
   const deleteMut = useDeleteExpenseMutation();
 
   const saving = addMut.isPending || updateMut.isPending || deleteMut.isPending;
-  const { showToast, ToastPortal } = useToast();
+  const { showToast, toasts } = useToast();
 
   // ── state ──
   const [emoji, setEmoji] = useState('🍚');
@@ -213,7 +214,7 @@ export function ExpenseForm({
 
   return (
     <div className="min-h-dvh bg-white">
-      <ToastPortal />
+      <ToastPortal toasts={toasts} />
       <TopBar
         title={
           <span>
