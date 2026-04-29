@@ -8,6 +8,7 @@ import {
   useUpdateExpenseMutation,
 } from '@/features/expenses/queries';
 import { TopBar } from '@/components/layout/TopBar';
+import { useToast } from '@/components/ui/Toast';
 import { nowLocalIso, toStoredWallClock } from '@/lib/datetime';
 
 type Mode = 'create' | 'edit' | 'ocr';
@@ -39,6 +40,7 @@ export function ExpenseForm({
   const deleteMut = useDeleteExpenseMutation();
 
   const saving = addMut.isPending || updateMut.isPending || deleteMut.isPending;
+  const { showToast, ToastPortal } = useToast();
 
   // ── state ──
   const [emoji, setEmoji] = useState('🍚');
@@ -159,15 +161,15 @@ export function ExpenseForm({
   async function handleSubmit() {
     if (!journey) return;
     if (typeof amountLocal !== 'number' || amountLocal <= 0) {
-      alert('금액을 입력해주세요');
+      showToast('금액을 입력해주세요');
       return;
     }
     if (!payer) {
-      alert('결제자를 선택해주세요');
+      showToast('결제자를 선택해주세요');
       return;
     }
     if (splitMode === 'shared' && splitWith.length === 0) {
-      alert('분담자를 최소 1명 선택해주세요');
+      showToast('분담자를 최소 1명 선택해주세요');
       return;
     }
 
@@ -202,8 +204,6 @@ export function ExpenseForm({
 
   async function handleDelete() {
     if (!expenseId) return;
-    const ok = window.confirm('이 내역을 삭제할까요?');
-    if (!ok) return;
     await deleteMut.mutateAsync({ id: expenseId, journeyId });
     onCanceled?.();
   }
@@ -213,6 +213,7 @@ export function ExpenseForm({
 
   return (
     <div className="min-h-dvh bg-white">
+      <ToastPortal />
       <TopBar
         title={
           <span>

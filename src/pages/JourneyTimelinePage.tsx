@@ -77,7 +77,7 @@ export function JourneyTimelinePage() {
     [grouped, selectedDate],
   );
 
-  if (!journey) return null;
+  if (!journey) return <JourneyTimelineSkeleton />;
 
   const mySpendLocal = sumMySpendLocal(journey, expenses);
   const mySpendKRW = sumMySpendKRW(journey, expenses);
@@ -370,6 +370,71 @@ export function JourneyTimelinePage() {
           <Camera className="size-8" />
         </Fab>
       </FabStack>
+    </div>
+  );
+}
+
+function JourneyTimelineSkeleton() {
+  return (
+    <div className="relative min-h-dvh bg-white pb-20">
+      {/* TopBar 스켈레톤 */}
+      <header className="sticky top-0 z-20 border-b border-slate-100 bg-white/90 backdrop-blur">
+        <div className="flex items-center gap-3 px-6 pb-5 pt-12">
+          <div className="size-7 rounded-xl bg-slate-100" />
+          <div className="flex-1 space-y-2">
+            <div className="h-4 w-32 animate-pulse rounded-lg bg-slate-100" />
+            <div className="h-3 w-24 animate-pulse rounded-lg bg-slate-100" />
+          </div>
+          <div className="flex gap-1">
+            <div className="size-9 animate-pulse rounded-xl bg-slate-100" />
+            <div className="size-9 animate-pulse rounded-xl bg-slate-100" />
+          </div>
+        </div>
+      </header>
+
+      <main className="space-y-10 px-6 py-8">
+        {/* 정산 카드 스켈레톤 */}
+        <div className="animate-pulse rounded-[32px] bg-slate-900/10 p-6">
+          <div className="mb-6 flex items-center justify-between">
+            <div className="h-3 w-24 rounded-full bg-slate-200" />
+            <div className="h-6 w-20 rounded-full bg-slate-200" />
+          </div>
+          <div className="h-3 w-16 rounded-full bg-slate-200" />
+          <div className="mt-3 h-10 w-40 rounded-xl bg-slate-200" />
+          <div className="mt-2 h-3 w-24 rounded-full bg-slate-200" />
+          <div className="mt-5 border-t border-slate-200 pt-4">
+            <div className="h-3 w-full rounded-full bg-slate-200" />
+          </div>
+        </div>
+
+        {/* 필터 버튼 스켈레톤 */}
+        <div className="flex gap-2">
+          {[60, 52, 52, 52].map((w, i) => (
+            <div
+              key={i}
+              className="animate-pulse rounded-full bg-slate-100 py-4"
+              style={{ width: w }}
+            />
+          ))}
+        </div>
+
+        {/* 지출 아이템 스켈레톤 */}
+        <div className="space-y-10">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="flex animate-pulse items-start gap-3">
+              <div className="size-10 rounded-2xl bg-slate-100" />
+              <div className="flex-1 space-y-2">
+                <div className="h-4 w-32 rounded-lg bg-slate-100" />
+                <div className="h-3 w-20 rounded-lg bg-slate-100" />
+              </div>
+              <div className="space-y-1 text-right">
+                <div className="h-4 w-20 rounded-lg bg-slate-100" />
+                <div className="h-3 w-14 rounded-lg bg-slate-100" />
+              </div>
+            </div>
+          ))}
+        </div>
+      </main>
     </div>
   );
 }
