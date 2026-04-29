@@ -4,6 +4,7 @@ import { ScrollToTop } from '@/components/layout/ScrollToTop';
 import { ProtectedRoute } from '@/routes/ProtectedRoute';
 
 import { LoginPage } from '@/pages/LoginPage';
+import { OnboardingPage } from '@/pages/OnboardingPage';
 import { HomePage } from '@/pages/HomePage';
 import { JourneyCreatePage } from '@/pages/JourneyCreatePage';
 import { JourneyTimelinePage } from '@/pages/JourneyTimelinePage';
@@ -21,6 +22,7 @@ export default function App() {
       <PhoneFrame>
         <ScrollToTop />
         <Routes>
+          <Route path="/onboarding" element={<OnboardingPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route element={<ProtectedRoute />}>
             <Route path="/" element={<HomePage />} />
