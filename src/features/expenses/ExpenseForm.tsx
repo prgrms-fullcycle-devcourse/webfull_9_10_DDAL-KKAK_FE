@@ -8,6 +8,8 @@ import {
   useUpdateExpenseMutation,
 } from '@/features/expenses/queries';
 import { TopBar } from '@/components/layout/TopBar';
+import { ToastPortal } from '@/components/ui/Toast';
+import { useToast } from '@/components/ui/useToast';
 import { nowLocalIso, toStoredWallClock } from '@/lib/datetime';
 
 type Mode = 'create' | 'edit' | 'ocr';
@@ -39,9 +41,74 @@ export function ExpenseForm({
   const deleteMut = useDeleteExpenseMutation();
 
   const saving = addMut.isPending || updateMut.isPending || deleteMut.isPending;
+  const { showToast, toasts } = useToast();
 
   // ── state ──
   const [emoji, setEmoji] = useState('🍚');
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+
+  const EMOJI_LIST = [
+    '🍜',
+    '🍣',
+    '🍕',
+    '🍔',
+    '🌮',
+    '🍱',
+    '🥗',
+    '🍰',
+    '🍩',
+    '🧁',
+    '🍺',
+    '🍵',
+    '☕',
+    '🥤',
+    '🧃',
+    '🍶',
+    '🥂',
+    '🍷',
+    '🧋',
+    '🍦',
+    '🛍️',
+    '👗',
+    '👟',
+    '💄',
+    '🎒',
+    '⌚',
+    '📱',
+    '💊',
+    '🧴',
+    '🪥',
+    '🚕',
+    '🚌',
+    '🚇',
+    '✈️',
+    '🚂',
+    '🚢',
+    '🛵',
+    '🚁',
+    '🚡',
+    '🛺',
+    '🏨',
+    '🏖️',
+    '🎡',
+    '🎭',
+    '🏛️',
+    '🎬',
+    '🎮',
+    '🎵',
+    '🎨',
+    '🏄',
+    '💰',
+    '🧾',
+    '🎁',
+    '🌸',
+    '🗺️',
+    '📸',
+    '🔑',
+    '🧳',
+    '⛽',
+    '🏥',
+  ];
   const [storeName, setStoreName] = useState('');
   const [amountLocal, setAmountLocal] = useState<number | ''>('');
   const [paidAt, setPaidAt] = useState(() => nowLocalIso());
@@ -95,15 +162,15 @@ export function ExpenseForm({
   async function handleSubmit() {
     if (!journey) return;
     if (typeof amountLocal !== 'number' || amountLocal <= 0) {
-      alert('금액을 입력해주세요');
+      showToast('금액을 입력해주세요');
       return;
     }
     if (!payer) {
-      alert('결제자를 선택해주세요');
+      showToast('결제자를 선택해주세요');
       return;
     }
     if (splitMode === 'shared' && splitWith.length === 0) {
-      alert('분담자를 최소 1명 선택해주세요');
+      showToast('분담자를 최소 1명 선택해주세요');
       return;
     }
 
@@ -138,8 +205,6 @@ export function ExpenseForm({
 
   async function handleDelete() {
     if (!expenseId) return;
-    const ok = window.confirm('이 내역을 삭제할까요?');
-    if (!ok) return;
     await deleteMut.mutateAsync({ id: expenseId, journeyId });
     onCanceled?.();
   }
@@ -149,6 +214,7 @@ export function ExpenseForm({
 
   return (
     <div className="min-h-dvh bg-white">
+      <ToastPortal toasts={toasts} />
       <TopBar
         title={
           <span>
@@ -172,18 +238,45 @@ export function ExpenseForm({
         )}
 
         {/* 이모지 + 가게명 */}
-        <section className="grid grid-cols-[auto_1fr] gap-3">
-          <input
-            value={emoji}
-            onChange={(e) => setEmoji(e.target.value.slice(0, 2))}
-            className="size-14 rounded-2xl border border-slate-100 bg-slate-50 text-center text-2xl"
-          />
-          <input
-            value={storeName}
-            onChange={(e) => setStoreName(e.target.value)}
-            placeholder="가게명"
-            className="rounded-2xl border border-slate-100 bg-slate-50 px-4 text-sm font-bold outline-none focus:border-blue-500"
-          />
+        <section className="space-y-2">
+          <div className="grid grid-cols-[auto_1fr] gap-3">
+            <button
+              type="button"
+              onClick={() => setShowEmojiPicker((v) => !v)}
+              className={`size-14 rounded-2xl border text-2xl transition active:scale-95 ${
+                showEmojiPicker ? 'border-blue-400 bg-blue-50' : 'border-slate-100 bg-slate-50'
+              }`}
+            >
+              {emoji}
+            </button>
+            <input
+              value={storeName}
+              onChange={(e) => setStoreName(e.target.value)}
+              placeholder="가게명"
+              className="rounded-2xl border border-slate-100 bg-slate-50 px-4 text-sm font-bold outline-none focus:border-blue-500"
+            />
+          </div>
+          {showEmojiPicker && (
+            <div className="rounded-2xl border border-slate-100 bg-slate-50 p-3">
+              <div className="grid grid-cols-10 gap-1">
+                {EMOJI_LIST.map((e) => (
+                  <button
+                    key={e}
+                    type="button"
+                    onClick={() => {
+                      setEmoji(e);
+                      setShowEmojiPicker(false);
+                    }}
+                    className={`flex items-center justify-center rounded-xl py-1.5 text-xl transition active:scale-90 ${
+                      emoji === e ? 'bg-blue-100' : 'hover:bg-slate-100'
+                    }`}
+                  >
+                    {e}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </section>
 
         {/* 금액 */}

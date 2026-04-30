@@ -1,5 +1,5 @@
 import html2canvas from 'html2canvas';
-import { ArrowRight } from 'lucide-react';
+import { ArrowRight, Check } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { TopBar } from '@/components/layout/TopBar';
@@ -24,6 +24,18 @@ export function ReportPage() {
   const [isCapturing, setIsCapturing] = useState(false);
   const [showBasis, setShowBasis] = useState(false);
   const [basisPerson, setBasisPerson] = useState<string | null>(null);
+  const [doneKeys, setDoneKeys] = useState<Set<string>>(new Set());
+
+  const toggleDone = (key: string) =>
+    setDoneKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
 
   if (!journey) return null;
 
@@ -168,9 +180,7 @@ export function ReportPage() {
 
             <div
               className={`rounded-2xl border p-4 ${
-                fromMeTotal > 0
-                  ? 'border-[#FFD0D0] bg-[#FFF5F5]'
-                  : 'border-slate-100 bg-slate-50'
+                fromMeTotal > 0 ? 'border-[#FFD0D0] bg-[#FFF5F5]' : 'border-slate-100 bg-slate-50'
               }`}
             >
               <p
@@ -214,39 +224,71 @@ export function ReportPage() {
             ) : (
               <div className="space-y-2">
                 {data.transfers.map((t) => {
+                  const key = `${t.from}->${t.to}-${t.amountLocal}`;
                   const krw = Math.round(t.amountLocal * journey.rate);
                   const fromIsMe = t.from === selfName;
                   const toIsMe = t.to === selfName;
+                  const done = doneKeys.has(key);
                   return (
                     <div
-                      key={`${t.from}->${t.to}-${t.amountLocal}`}
-                      className="flex items-center justify-between rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3"
+                      key={key}
+                      className={`flex items-center justify-between rounded-2xl border px-4 py-3 transition-colors ${
+                        done ? 'border-green-100 bg-green-50' : 'border-slate-100 bg-slate-50'
+                      }`}
                     >
                       <div className="flex items-center gap-2 text-[12px] font-black tracking-tight">
                         <span
                           className={`rounded-md px-2 py-0.5 text-[10px] font-black ${
-                            fromIsMe ? 'bg-[#FF4D4D] text-white' : 'bg-white text-slate-700'
+                            done
+                              ? 'bg-green-200 text-green-700'
+                              : fromIsMe
+                                ? 'bg-[#FF4D4D] text-white'
+                                : 'bg-white text-slate-700'
                           }`}
                         >
                           {t.from}
                         </span>
-                        <ArrowRight className="size-3 text-slate-400" />
+                        <ArrowRight
+                          className={`size-3 ${done ? 'text-green-400' : 'text-slate-400'}`}
+                        />
                         <span
                           className={`rounded-md px-2 py-0.5 text-[10px] font-black ${
-                            toIsMe ? 'bg-blue-500 text-white' : 'bg-white text-slate-700'
+                            done
+                              ? 'bg-green-200 text-green-700'
+                              : toIsMe
+                                ? 'bg-blue-500 text-white'
+                                : 'bg-white text-slate-700'
                           }`}
                         >
                           {t.to}
                         </span>
                       </div>
-                      <div className="text-right">
-                        <p className="text-sm font-black tracking-tight text-slate-900">
-                          {formatKRW(krw)}
-                          <span className="ml-0.5 text-[10px] font-bold text-slate-400">원</span>
-                        </p>
-                        <p className="text-[10px] font-bold text-slate-400">
-                          {formatLocal(t.amountLocal)} {journey.currency}
-                        </p>
+                      <div className="flex items-center gap-3">
+                        <div className="text-right">
+                          <p
+                            className={`text-sm font-black tracking-tight ${done ? 'text-green-600 line-through' : 'text-slate-900'}`}
+                          >
+                            {formatKRW(krw)}
+                            <span className="ml-0.5 text-[10px] font-bold opacity-60">원</span>
+                          </p>
+                          <p
+                            className={`text-[10px] font-bold ${done ? 'text-green-400 line-through' : 'text-slate-400'}`}
+                          >
+                            {formatLocal(t.amountLocal)} {journey.currency}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => toggleDone(key)}
+                          className={`flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-full border-2 transition-colors active:scale-95 ${
+                            done
+                              ? 'border-green-500 bg-green-500 text-white'
+                              : 'border-slate-300 bg-white text-transparent'
+                          }`}
+                          aria-label="송금 완료"
+                        >
+                          <Check className="size-3.5" strokeWidth={3} />
+                        </button>
                       </div>
                     </div>
                   );
@@ -376,9 +418,7 @@ export function ReportPage() {
                                 <p className="mt-0.5 text-[10px] font-bold text-slate-400">
                                   결제자 {e.payer} ·{' '}
                                   {(e.method ?? 'card') === 'cash' ? '현금' : '카드'} ·{' '}
-                                  {isShared
-                                    ? `공동 (${splitPeople.join(', ')}) 1/${n}`
-                                    : '개인'}
+                                  {isShared ? `공동 (${splitPeople.join(', ')}) 1/${n}` : '개인'}
                                 </p>
                                 <p className="mt-1 text-[10px] font-black text-blue-600">
                                   {selected} 반영: {formatLocal(myShare)} {journey.currency}
