@@ -10,9 +10,12 @@ export function LoginPage() {
   return (
     <div className="min-h-dvh bg-white px-6 pt-24">
       <div className="mx-auto flex max-w-sm flex-col items-center text-center">
-        <div className="mb-6 grid size-16 place-items-center rounded-3xl bg-slate-50 text-3xl">
-          🧾✈️
-        </div>
+        <img
+          src="/icons/icon-512.png"
+          alt="Travel Tick"
+          className="mb-4 size-32 select-none"
+          draggable={false}
+        />
         <h1 className="text-2xl font-black tracking-tight text-slate-900">트래블 틱</h1>
         <p className="mt-3 text-sm font-bold leading-relaxed text-slate-400">
           여행은 내가 할게,

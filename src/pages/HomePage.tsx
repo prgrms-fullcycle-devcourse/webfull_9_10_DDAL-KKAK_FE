@@ -11,6 +11,128 @@ import { useAllExpensesQuery } from '@/features/expenses/queries';
 import { useJourneysQuery } from '@/features/journeys/queries';
 import { calcSettlement, ledgerSelfName, sumMySpendKRW } from '@/features/settlement/calc';
 
+/** 나라 이름 → 국기 이모지 (썸네일용) */
+function countryEmoji(country: string): string {
+  switch (country) {
+    case '일본':
+      return '🇯🇵';
+    case '미국':
+      return '🇺🇸';
+    case '유럽':
+      return '🇪🇺';
+    case '한국':
+      return '🇰🇷';
+    default:
+      return '🗺️';
+  }
+}
+
+/** "2025-07-10" + "2025-07-17" → "2025.07.10 - 17" (같은 달이면 일자만 축약) */
+function formatCompactDateRange(start: string, end: string): string {
+  const [sy, sm, sd] = start.split('-');
+  const [ey, em, ed] = end.split('-');
+  if (sy === ey && sm === em) return `${sy}.${sm}.${sd} - ${ed}`;
+  if (sy === ey) return `${sy}.${sm}.${sd} - ${em}.${ed}`;
+  return `${sy}.${sm}.${sd} - ${ey}.${em}.${ed}`;
+}
+
+/** 멤버 표기: 3명 이하면 전부 나열, 그 이상이면 "X 외 N명" */
+function formatMembers(participants: string[]): string {
+  if (participants.length === 0) return '나';
+  if (participants.length <= 3) return participants.join(', ');
+  return `${participants[0]} 외 ${participants.length - 1}명`;
+}
+
+function CompactJourneyRow({
+  j,
+  expenses,
+  onClick,
+}: {
+  j: Journey;
+  expenses: Expense[];
+  onClick: () => void;
+}) {
+  const phase = getJourneyPhase(j.startDate, j.endDate);
+  const status = getTripStatusLabel(j.startDate, j.endDate);
+  const tripExpenses = expenses.filter((e) => e.journeyId === j.id);
+  const spentKRW = sumMySpendKRW(j, tripExpenses);
+  const tripDays = getTripDays(j.startDate, j.endDate);
+
+  const hasBudget = typeof j.budgetKRW === 'number' && j.budgetKRW > 0;
+
+  // 지난 여행 정산 요약
+  const myName = ledgerSelfName(j);
+  const { nets, transfers } = calcSettlement(j, tripExpenses);
+  const myNetLocal = nets.find((n) => n.person === myName)?.netLocal ?? 0;
+  const myNetKRW = Math.round(myNetLocal * j.rate);
+
+  // 사용자가 결산표에서 모든 송금 건을 완료 처리했는지 검사
+  const settledKeys = new Set(j.settledTransferKeys ?? []);
+  const allTransfersSettled =
+    transfers.length > 0 &&
+    transfers.every((t) => settledKeys.has(`${t.from}->${t.to}-${t.amountLocal}`));
+
+  const settleTone: 'credit' | 'debit' | 'none' = allTransfersSettled
+    ? 'none'
+    : myNetKRW > 0
+      ? 'credit'
+      : myNetKRW < 0
+        ? 'debit'
+        : 'none';
+  const settleLabel =
+    settleTone === 'credit'
+      ? `받을 돈 ${formatKRW(Math.abs(myNetKRW))}원`
+      : settleTone === 'debit'
+        ? `보낼 돈 ${formatKRW(Math.abs(myNetKRW))}원`
+        : '정산 완료';
+  const settleColor =
+    settleTone === 'credit'
+      ? 'text-blue-600'
+      : settleTone === 'debit'
+        ? 'text-[#FF4D4D]'
+        : 'text-slate-400';
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex w-full cursor-pointer items-center gap-3 rounded-2xl border border-slate-100 bg-white p-4 text-left active:scale-[0.99]"
+    >
+      {/* 썸네일 (국기) */}
+      <div className="grid size-12 shrink-0 place-items-center rounded-xl bg-slate-50 text-2xl">
+        {countryEmoji(j.country)}
+      </div>
+
+      {/* 가운데: 이름 + 메타 */}
+      <div className="min-w-0 flex-1">
+        <h4 className="truncate text-sm font-black tracking-tight text-slate-900">{j.name}</h4>
+        <p className="mt-0.5 truncate text-[10px] font-bold text-slate-400">
+          {formatCompactDateRange(j.startDate, j.endDate)} · {formatMembers(j.participants)}
+        </p>
+      </div>
+
+      {/* 오른쪽: 단계별 정보 */}
+      <div className="shrink-0 text-right">
+        {phase === 'past' ? (
+          <>
+            <p className="text-sm font-black text-slate-900">{formatKRW(spentKRW)}원</p>
+            <p className={`mt-0.5 text-[10px] font-black ${settleColor}`}>{settleLabel}</p>
+          </>
+        ) : (
+          <>
+            <p className="text-sm font-black text-blue-600">{status.label}</p>
+            <p className="mt-0.5 text-[10px] font-bold text-slate-400">
+              {hasBudget
+                ? `예산 ${formatKRW(j.budgetKRW as number)}원`
+                : `${tripDays}일 · ${j.participants.length}명`}
+            </p>
+          </>
+        )}
+      </div>
+    </button>
+  );
+}
+
 function JourneyCard({
   j,
   expenses,
@@ -59,12 +181,22 @@ function JourneyCard({
 
   // 정산 요약: 내 순 정산액(netLocal = 낸돈 − 부담할몫) → KRW 반올림
   // net > 0: 받을 돈, net < 0: 보낼 돈, net ≈ 0: 정산 완료
+  // 사용자가 결산표에서 모든 송금 건을 완료 처리했으면 강제로 'none' (정산 완료)
   const myName = ledgerSelfName(j);
-  const { nets } = calcSettlement(j, tripExpenses);
+  const { nets, transfers } = calcSettlement(j, tripExpenses);
   const myNetLocal = nets.find((n) => n.person === myName)?.netLocal ?? 0;
   const myNetKRW = Math.round(myNetLocal * j.rate);
-  const settleTone: 'credit' | 'debit' | 'none' =
-    myNetKRW > 0 ? 'credit' : myNetKRW < 0 ? 'debit' : 'none';
+  const settledKeys = new Set(j.settledTransferKeys ?? []);
+  const allTransfersSettled =
+    transfers.length > 0 &&
+    transfers.every((t) => settledKeys.has(`${t.from}->${t.to}-${t.amountLocal}`));
+  const settleTone: 'credit' | 'debit' | 'none' = allTransfersSettled
+    ? 'none'
+    : myNetKRW > 0
+      ? 'credit'
+      : myNetKRW < 0
+        ? 'debit'
+        : 'none';
   const settleLabel =
     settleTone === 'credit' ? '받을 돈' : settleTone === 'debit' ? '보낼 돈' : '정산 완료';
   const settleColor =
@@ -241,11 +373,13 @@ export function HomePage() {
     subtitle,
     items,
     emptyText,
+    layout = 'card',
   }: {
     title: string;
     subtitle: string;
     items: Journey[];
     emptyText: string;
+    layout?: 'card' | 'compact';
   }) => (
     <section className="mb-10">
       <div className="mb-3">
@@ -257,15 +391,24 @@ export function HomePage() {
           {emptyText}
         </p>
       ) : (
-        <div className="space-y-4">
-          {items.map((j) => (
-            <JourneyCard
-              key={j.id}
-              j={j}
-              expenses={allExpenses}
-              onClick={() => nav(`/journeys/${j.id}`)}
-            />
-          ))}
+        <div className={layout === 'compact' ? 'space-y-3' : 'space-y-4'}>
+          {items.map((j) =>
+            layout === 'compact' ? (
+              <CompactJourneyRow
+                key={j.id}
+                j={j}
+                expenses={allExpenses}
+                onClick={() => nav(`/journeys/${j.id}`)}
+              />
+            ) : (
+              <JourneyCard
+                key={j.id}
+                j={j}
+                expenses={allExpenses}
+                onClick={() => nav(`/journeys/${j.id}`)}
+              />
+            ),
+          )}
         </div>
       )}
     </section>
@@ -307,12 +450,14 @@ export function HomePage() {
           subtitle="아직 시작일이 오늘보다 이후인 여정"
           items={upcoming}
           emptyText="예정된 여행이 없어요."
+          layout="compact"
         />
         <Section
           title="지난 여행"
           subtitle="종료일이 지난 여정"
           items={past}
           emptyText="종료된 여행이 없어요."
+          layout="compact"
         />
       </main>
 

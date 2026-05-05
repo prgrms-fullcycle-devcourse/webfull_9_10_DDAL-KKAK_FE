@@ -4,7 +4,7 @@ import { useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { TopBar } from '@/components/layout/TopBar';
 import { useExpensesQuery } from '@/features/expenses/queries';
-import { useJourneyQuery } from '@/features/journeys/queries';
+import { useJourneyQuery, useUpdateJourneyMutation } from '@/features/journeys/queries';
 import {
   calcSettlement,
   ledgerSelfName,
@@ -36,6 +36,25 @@ export function ReportPage() {
       }
       return next;
     });
+
+  const updateJourneyMut = useUpdateJourneyMutation();
+
+  // 영속화된 송금 완료 키 (Journey.settledTransferKeys에서 직접 읽음)
+  const doneKeys = new Set(journey?.settledTransferKeys ?? []);
+
+  const toggleDone = (key: string) => {
+    if (!journey) return;
+    const current = new Set(journey.settledTransferKeys ?? []);
+    if (current.has(key)) {
+      current.delete(key);
+    } else {
+      current.add(key);
+    }
+    updateJourneyMut.mutate({
+      id: journey.id,
+      patch: { settledTransferKeys: Array.from(current) },
+    });
+  };
 
   if (!journey) return null;
 
