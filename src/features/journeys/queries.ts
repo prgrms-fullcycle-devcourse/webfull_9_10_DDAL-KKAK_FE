@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { Journey } from '@/features/journeys/types';
 import { deleteJourney, loadJourneys, updateJourney } from '@/features/journeys/storage';
-import { createTrip, fetchTrips, type CreateTripInput } from '@/features/journeys/api';
+import { createTrip, fetchTrip, fetchTrips, type CreateTripInput } from '@/features/journeys/api';
 
 async function sleep(ms: number) {
   await new Promise((r) => setTimeout(r, ms));
@@ -18,12 +18,7 @@ export function useJourneyQuery(journeyId: string | undefined) {
   return useQuery({
     queryKey: ['journeys', journeyId],
     enabled: !!journeyId,
-    queryFn: async (): Promise<Journey> => {
-      await sleep(150);
-      const found = loadJourneys().find((j) => j.id === journeyId);
-      if (!found) throw new Error('여정을 찾을 수 없어요.');
-      return found;
-    },
+    queryFn: (): Promise<Journey> => fetchTrip(journeyId!),
   });
 }
 

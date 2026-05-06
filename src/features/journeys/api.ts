@@ -6,6 +6,11 @@ export async function fetchTrips(): Promise<Journey[]> {
   return data;
 }
 
+export async function fetchTrip(tripId: string): Promise<Journey> {
+  const { data } = await apiClient.get<Journey>(`/trips/${tripId}`);
+  return data;
+}
+
 export type CreateTripInput = Omit<Journey, 'id'>;
 
 export async function createTrip(input: CreateTripInput): Promise<Journey> {
