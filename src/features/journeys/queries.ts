@@ -1,12 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { Journey } from '@/features/journeys/types';
-import {
-  addJourney,
-  deleteJourney,
-  loadJourneys,
-  updateJourney,
-} from '@/features/journeys/storage';
-import { fetchTrips } from '@/features/journeys/api';
+import { deleteJourney, loadJourneys, updateJourney } from '@/features/journeys/storage';
+import { createTrip, fetchTrips, type CreateTripInput } from '@/features/journeys/api';
 
 async function sleep(ms: number) {
   await new Promise((r) => setTimeout(r, ms));
@@ -35,12 +30,10 @@ export function useJourneyQuery(journeyId: string | undefined) {
 export function useCreateJourneyMutation() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (journey: Journey) => {
-      await sleep(150);
-      return addJourney(journey);
-    },
-    onSuccess: (journeys) => {
-      qc.setQueryData(['journeys'], journeys);
+    mutationFn: (input: CreateTripInput) => createTrip(input),
+    onSuccess: (newJourney) => {
+      qc.setQueryData<Journey[]>(['journeys'], (prev = []) => [newJourney, ...prev]);
+      qc.setQueryData(['journeys', newJourney.id], newJourney);
     },
   });
 }
