@@ -9,10 +9,6 @@ import {
   type CreateTripInput,
 } from '@/features/journeys/api';
 
-async function sleep(ms: number) {
-  await new Promise((r) => setTimeout(r, ms));
-}
-
 export function useJourneysQuery() {
   return useQuery({
     queryKey: ['journeys'],
