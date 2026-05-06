@@ -1,7 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { Journey } from '@/features/journeys/types';
-import { deleteJourney, loadJourneys, updateJourney } from '@/features/journeys/storage';
-import { createTrip, fetchTrip, fetchTrips, type CreateTripInput } from '@/features/journeys/api';
+import { deleteJourney } from '@/features/journeys/storage';
+import {
+  createTrip,
+  fetchTrip,
+  fetchTrips,
+  updateTrip,
+  type CreateTripInput,
+} from '@/features/journeys/api';
 
 async function sleep(ms: number) {
   await new Promise((r) => setTimeout(r, ms));
@@ -36,14 +42,12 @@ export function useCreateJourneyMutation() {
 export function useUpdateJourneyMutation() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, patch }: { id: string; patch: Partial<Journey> }) => {
-      await sleep(150);
-      return updateJourney(id, patch);
-    },
-    onSuccess: (journeys, { id }) => {
-      qc.setQueryData(['journeys'], journeys);
-      const updated = journeys.find((j) => j.id === id);
-      if (updated) qc.setQueryData(['journeys', id], updated);
+    mutationFn: ({ id, patch }: { id: string; patch: Partial<Journey> }) => updateTrip(id, patch),
+    onSuccess: (updatedJourney) => {
+      qc.setQueryData<Journey[]>(['journeys'], (prev = []) =>
+        prev.map((j) => (j.id === updatedJourney.id ? updatedJourney : j)),
+      );
+      qc.setQueryData(['journeys', updatedJourney.id], updatedJourney);
     },
   });
 }
