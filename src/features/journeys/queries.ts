@@ -6,6 +6,7 @@ import {
   loadJourneys,
   updateJourney,
 } from '@/features/journeys/storage';
+import { fetchTrips } from '@/features/journeys/api';
 
 async function sleep(ms: number) {
   await new Promise((r) => setTimeout(r, ms));
@@ -14,10 +15,7 @@ async function sleep(ms: number) {
 export function useJourneysQuery() {
   return useQuery({
     queryKey: ['journeys'],
-    queryFn: async (): Promise<Journey[]> => {
-      await sleep(200);
-      return loadJourneys();
-    },
+    queryFn: (): Promise<Journey[]> => fetchTrips(),
   });
 }
 
