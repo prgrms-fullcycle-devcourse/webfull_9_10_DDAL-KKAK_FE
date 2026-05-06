@@ -16,6 +16,10 @@ export async function updateTrip(tripId: string, patch: Partial<Journey>): Promi
   return data;
 }
 
+export async function deleteTrip(tripId: string): Promise<void> {
+  await apiClient.delete(`/trips/${tripId}`);
+}
+
 export type CreateTripInput = Omit<Journey, 'id'>;
 
 export async function createTrip(input: CreateTripInput): Promise<Journey> {

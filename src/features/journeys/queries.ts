@@ -1,8 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { Journey } from '@/features/journeys/types';
-import { deleteJourney } from '@/features/journeys/storage';
 import {
   createTrip,
+  deleteTrip,
   fetchTrip,
   fetchTrips,
   updateTrip,
@@ -55,12 +55,9 @@ export function useUpdateJourneyMutation() {
 export function useDeleteJourneyMutation() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (id: string) => {
-      await sleep(150);
-      return deleteJourney(id);
-    },
-    onSuccess: (journeys, id) => {
-      qc.setQueryData(['journeys'], journeys);
+    mutationFn: (id: string) => deleteTrip(id),
+    onSuccess: (_, id) => {
+      qc.setQueryData<Journey[]>(['journeys'], (prev = []) => prev.filter((j) => j.id !== id));
       qc.removeQueries({ queryKey: ['journeys', id] });
       qc.removeQueries({ queryKey: ['expenses', id] });
     },
