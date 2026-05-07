@@ -8,16 +8,23 @@ import { ledgerSelfName } from '@/features/settlement/calc';
 import { rotateDataUrl } from '@/lib/image';
 import type { OcrDraft } from '@/features/ocr/types';
 import { useAddExpenseMutation } from '@/features/expenses/queries';
+import { getExpenseErrorMessage } from '@/features/expenses/expensesApi';
 import { nowLocalIso, toStoredWallClock } from '@/lib/datetime';
+import { useAuth } from '@/features/auth/useAuth';
+import { deleteReceiptOcrJob, getOcrErrorMessage } from '@/features/ocr/ocrApi';
+import { ToastPortal } from '@/components/ui/Toast';
+import { useToast } from '@/components/ui/useToast';
 
-type LocationState = { draft?: OcrDraft; imageDataUrl?: string };
+type LocationState = { draft?: OcrDraft; imageDataUrl?: string; receiptId?: string };
 
 export function OcrPreviewPage() {
   const nav = useNavigate();
   const { journeyId } = useParams();
   const { state } = useLocation() as { state: LocationState | null };
+  const { user } = useAuth();
   const { data: journey } = useJourneyQuery(journeyId);
-  const addExpense = useAddExpenseMutation();
+  const addExpense = useAddExpenseMutation(user?.id);
+  const { showToast, toasts } = useToast();
 
   const initialDraft = useMemo<OcrDraft | null>(() => {
     return state?.draft ?? null;
@@ -50,6 +57,15 @@ export function OcrPreviewPage() {
   }
 
   const defaultSplitWith = journey.participants.length ? journey.participants : ['나'];
+  const receiptId = state?.receiptId;
+  const cleanupReceiptJob = async () => {
+    if (!receiptId || !user?.id) return;
+    try {
+      await deleteReceiptOcrJob({ receiptId, userId: user.id });
+    } catch {
+      // 삭제 실패와 무관하게 이동 동선은 유지
+    }
+  };
 
   const onPost = async () => {
     if (!journeyId || !draft) return;
@@ -58,34 +74,48 @@ export function OcrPreviewPage() {
     const isShared = draft.splitMode === 'shared';
     const splitWith = isShared ? (draft.splitWith ?? defaultSplitWith) : [draft.payer];
 
-    await addExpense.mutateAsync({
-      id: `e-${Date.now()}`,
-      journeyId,
-      storeName: draft.storeName.trim() || '지출',
-      amountLocal: Number(draft.amountLocal) || 0,
+    try {
+      await addExpense.mutateAsync({
+        id: `e-${Date.now()}`,
+        journeyId,
+        receiptId: receiptId ?? undefined,
+        storeName: draft.storeName.trim() || '지출',
+        amountLocal: Number(draft.amountLocal) || 0,
 
-      currency: draft.currency,
-      splitMode: draft.splitMode,
-      splitWith,
+        currency: draft.currency,
+        splitMode: draft.splitMode,
+        splitWith,
 
-      method: draft.method ?? 'card',
-      category: draft.category || '기타',
-      paidAt,
-      payer: draft.payer,
-      emoji: draft.emoji || '🧾',
+        method: draft.method ?? 'card',
+        category: draft.category || '기타',
+        paidAt,
+        payer: draft.payer,
+        emoji: draft.emoji || '🧾',
 
-      comment: draft.comment?.trim() || undefined,
+        comment: draft.comment?.trim() || undefined,
 
-      createdAt: systemNow,
-      updatedAt: systemNow,
-    });
+        createdAt: systemNow,
+        updatedAt: systemNow,
+      });
 
-    nav(`/journeys/${journeyId}`, { replace: true });
+      nav(`/journeys/${journeyId}`, { replace: true });
+    } catch (error) {
+      showToast(getExpenseErrorMessage(error));
+    }
   };
 
   return (
     <div className="min-h-dvh bg-slate-50">
-      <TopBar title="스캔 완료! 3초 컷" backTo={`/journeys/${journey.id}/scan`} />
+      <ToastPortal toasts={toasts} />
+      <TopBar
+        title="스캔 완료! 3초 컷"
+        onBack={() => {
+          void (async () => {
+            await cleanupReceiptJob();
+            nav(`/journeys/${journey.id}/scan`);
+          })();
+        }}
+      />
 
       <main className="space-y-4 px-6 py-6 pb-28">
         {imageDataUrl ? (
@@ -374,10 +404,42 @@ export function OcrPreviewPage() {
         </button>
         <button
           type="button"
-          onClick={() => nav(`/journeys/${journey.id}/scan`)}
+          onClick={async () => {
+            await cleanupReceiptJob();
+            nav(`/journeys/${journey.id}/scan`);
+          }}
           className="mt-3 w-full py-2 text-sm font-black text-slate-400"
         >
           다시 찍기
+        </button>
+        <button
+          type="button"
+          onClick={async () => {
+            if (!receiptId || !user?.id) return;
+            try {
+              await deleteReceiptOcrJob({ receiptId, userId: user.id });
+              setImageDataUrl(null);
+              setDraft({
+                storeName: '',
+                amountLocal: 0,
+                currency: journey.currency,
+                paidAt: nowLocalIso(),
+                category: '기타',
+                splitMode: 'shared',
+                splitWith: defaultSplitWith,
+                method: 'card',
+                payer: journey.selfParticipant ?? journey.participants[0] ?? '나',
+                emoji: '🧾',
+                comment: '',
+              });
+              showToast('OCR 결과를 삭제했어요.');
+            } catch (error) {
+              showToast(getOcrErrorMessage(error));
+            }
+          }}
+          className="mt-1 w-full py-2 text-sm font-black text-red-500"
+        >
+          OCR 결과 삭제
         </button>
       </div>
     </div>

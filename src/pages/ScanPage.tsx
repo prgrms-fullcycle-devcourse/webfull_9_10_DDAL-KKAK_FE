@@ -1,43 +1,117 @@
 import { ImagePlus, RefreshCcw, X } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import type { OcrDraft } from '@/features/ocr/types';
-import { nowLocalIso } from '@/lib/datetime';
+import { ToastPortal } from '@/components/ui/Toast';
+import { useToast } from '@/components/ui/useToast';
+import { useAuth } from '@/features/auth/useAuth';
+import { buildOcrDraftFromParsed, countryToReceiptLocale } from '@/features/ocr/buildDraftFromOcr';
+import {
+  createReceiptOcrJob,
+  deleteReceiptOcrJob,
+  getOcrErrorMessage,
+  pollReceiptOcrJob,
+  validateReceiptFile,
+} from '@/features/ocr/ocrApi';
+import { useJourneyQuery } from '@/features/journeys/queries';
 import { fileToDataUrl } from '@/lib/image';
 
 export function ScanPage() {
   const nav = useNavigate();
   const { journeyId } = useParams();
+  const { user } = useAuth();
+  const { data: journey } = useJourneyQuery(journeyId);
+  const { showToast, toasts } = useToast();
   const [isScanning, setIsScanning] = useState(false);
   const cameraInputRef = useRef<HTMLInputElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const activeReceiptIdRef = useRef<string | null>(null);
+
+  const cleanupActiveOcrJob = async (userId: string) => {
+    const receiptId = activeReceiptIdRef.current;
+    if (!receiptId) return;
+    try {
+      await deleteReceiptOcrJob({ receiptId, userId });
+    } catch {
+      // 정리 실패해도 사용자 플로우는 계속 진행
+    } finally {
+      activeReceiptIdRef.current = null;
+    }
+  };
 
   const handlePick = async (file: File) => {
-    if (!journeyId) return;
+    if (!journeyId || !journey) {
+      showToast('여정 정보를 불러오는 중이에요. 잠시 후 다시 시도해 주세요.');
+      return;
+    }
+    const uid = user?.id?.trim();
+    if (!uid) {
+      showToast('로그인이 필요해요.');
+      return;
+    }
+
+    const invalid = validateReceiptFile(file);
+    if (invalid) {
+      showToast(invalid);
+      return;
+    }
+
     setIsScanning(true);
     const imageDataUrl = await fileToDataUrl(file);
-    await new Promise((r) => setTimeout(r, 700));
 
-    const draft: OcrDraft = {
-      storeName: '패밀리마트 나카스점',
-      amountLocal: 1250,
-      currency: 'JPY',
-      paidAt: nowLocalIso(),
-      category: '식비',
-      splitMode: 'shared',
-      method: 'card',
-      payer: '나',
-      emoji: '🍱',
-      comment: '',
-    };
-    setIsScanning(false);
-    nav(`/journeys/${journeyId}/ocr-preview`, { state: { draft, imageDataUrl } });
+    try {
+      const receiptLocale = countryToReceiptLocale(journey.country);
+      const { receiptId } = await createReceiptOcrJob({
+        file,
+        tripId: journeyId,
+        userId: uid,
+        currencyHint: journey.currency,
+        receiptLocale,
+      });
+      activeReceiptIdRef.current = receiptId;
+
+      const job = await pollReceiptOcrJob(receiptId, uid, {
+        intervalMs: 1500,
+        maxAttempts: 45,
+      });
+
+      if (job.status === 'FAILED' || job.status === 'EXPIRED') {
+        const msg = job.failure?.detail ?? 'OCR 처리에 실패했어요.';
+        showToast(msg);
+        await cleanupActiveOcrJob(uid);
+        setIsScanning(false);
+        return;
+      }
+
+      if (job.status !== 'SUCCESS' || !job.result) {
+        showToast('OCR 결과를 받지 못했어요.');
+        await cleanupActiveOcrJob(uid);
+        setIsScanning(false);
+        return;
+      }
+
+      const draft = buildOcrDraftFromParsed(journey, job.result);
+      nav(`/journeys/${journeyId}/ocr-preview`, { state: { draft, imageDataUrl, receiptId } });
+    } catch (e) {
+      if (uid) await cleanupActiveOcrJob(uid);
+      showToast(getOcrErrorMessage(e));
+    } finally {
+      setIsScanning(false);
+    }
   };
 
   return (
     <div className="fixed inset-0 z-50 mx-auto flex h-dvh w-full max-w-md flex-col bg-slate-900">
+      <ToastPortal toasts={toasts} />
       <div className="flex items-center justify-between p-6 pt-12 text-white">
-        <button type="button" onClick={() => nav(-1)} aria-label="닫기">
+        <button
+          type="button"
+          onClick={async () => {
+            const uid = user?.id?.trim();
+            if (uid) await cleanupActiveOcrJob(uid);
+            nav(-1);
+          }}
+          aria-label="닫기"
+        >
           <X className="size-6" />
         </button>
         <span className="font-black tracking-tight">영수증 딸깍 스캔</span>
@@ -52,6 +126,9 @@ export function ScanPage() {
               <div className="flex flex-col items-center text-white">
                 <RefreshCcw className="mb-4 size-10 animate-spin" />
                 <p className="text-xl font-black">AI 추출 중...</p>
+                <p className="mt-3 max-w-[240px] text-center text-[11px] font-bold text-white/70">
+                  첫 분석은 서버에서 언어 데이터를 준비하느라 10~30초 걸릴 수 있어요.
+                </p>
               </div>
             </div>
           ) : null}
@@ -62,7 +139,7 @@ export function ScanPage() {
         <div className="mb-4 flex items-center gap-3">
           <button
             type="button"
-            disabled={isScanning}
+            disabled={isScanning || !journey}
             onClick={() => cameraInputRef.current?.click()}
             className="flex size-20 items-center justify-center rounded-full border-4 border-white/30 p-1 disabled:opacity-50"
             aria-label="촬영하기"
@@ -72,7 +149,7 @@ export function ScanPage() {
 
           <button
             type="button"
-            disabled={isScanning}
+            disabled={isScanning || !journey}
             onClick={() => fileInputRef.current?.click()}
             className="grid size-14 place-items-center rounded-2xl border border-white/20 bg-white/10 text-white disabled:opacity-50"
             aria-label="파일 첨부"
