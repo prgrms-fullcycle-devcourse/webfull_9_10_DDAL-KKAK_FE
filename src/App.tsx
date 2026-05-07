@@ -3,7 +3,9 @@ import { PhoneFrame } from '@/components/layout/PhoneFrame';
 import { ScrollToTop } from '@/components/layout/ScrollToTop';
 import { ProtectedRoute } from '@/routes/ProtectedRoute';
 
+import { AuthCallbackPage } from '@/pages/AuthCallbackPage';
 import { LoginPage } from '@/pages/LoginPage';
+import { OnboardingPage } from '@/pages/OnboardingPage';
 import { HomePage } from '@/pages/HomePage';
 import { JourneyCreatePage } from '@/pages/JourneyCreatePage';
 import { JourneyTimelinePage } from '@/pages/JourneyTimelinePage';
@@ -21,7 +23,9 @@ export default function App() {
       <PhoneFrame>
         <ScrollToTop />
         <Routes>
+          <Route path="/onboarding" element={<OnboardingPage />} />
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/auth/callback" element={<AuthCallbackPage />} />
           <Route element={<ProtectedRoute />}>
             <Route path="/" element={<HomePage />} />
             <Route path="/journeys/new" element={<JourneyCreatePage />} />

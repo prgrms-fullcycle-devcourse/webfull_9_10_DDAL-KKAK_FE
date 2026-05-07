@@ -1,14 +1,26 @@
-import { defineConfig } from 'vite';
+import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { VitePWA } from 'vite-plugin-pwa';
 import path from 'node:path';
 
-export default defineConfig({
-  resolve: {
-    alias: { '@': path.resolve(__dirname, './src') },
-  },
-  plugins: [
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, process.cwd(), '');
+  const API_BASE = env.VITE_API_BASE_URL || 'http://localhost:4000';
+
+  return {
+    resolve: {
+      alias: { '@': path.resolve(__dirname, './src') },
+    },
+    // dev 서버에서 /auth, /api 경로를 백엔드로 포워딩 (CORS 우회).
+    // 배포 환경에선 실제 백엔드 URL로 직접 호출 (현재 환경변수 기준).
+    server: {
+      proxy: {
+        '/auth': { target: API_BASE, changeOrigin: true },
+        '/api': { target: API_BASE, changeOrigin: true },
+      },
+    },
+    plugins: [
     react(),
     tailwindcss(),
     VitePWA({
@@ -36,4 +48,5 @@ export default defineConfig({
       devOptions: { enabled: true }, // dev에서도 SW 등록 테스트 가능
     }),
   ],
+  };
 });
