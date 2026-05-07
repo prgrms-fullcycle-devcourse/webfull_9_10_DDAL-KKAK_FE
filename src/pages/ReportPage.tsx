@@ -75,8 +75,6 @@ export function ReportPage() {
   const allToMeSettled = toMeAll.length > 0 && toMe.length === 0;
   const allFromMeSettled = fromMeAll.length > 0 && fromMe.length === 0;
 
-  const myNetLocal = data.nets.find((n) => n.person === selfName)?.netLocal ?? 0;
-
   const tripDateRange = `${journey.startDate.replaceAll('-', '.')} ~ ${journey.endDate.replaceAll('-', '.')}`;
 
   const handleCapture = async () => {
