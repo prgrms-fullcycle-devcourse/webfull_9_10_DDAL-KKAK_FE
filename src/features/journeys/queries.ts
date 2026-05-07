@@ -1,23 +1,18 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { Journey } from '@/features/journeys/types';
 import {
-  addJourney,
-  deleteJourney,
-  loadJourneys,
-  updateJourney,
-} from '@/features/journeys/storage';
-
-async function sleep(ms: number) {
-  await new Promise((r) => setTimeout(r, ms));
-}
+  createTrip,
+  deleteTrip,
+  fetchTrip,
+  fetchTrips,
+  updateTrip,
+  type CreateTripInput,
+} from '@/features/journeys/api';
 
 export function useJourneysQuery() {
   return useQuery({
     queryKey: ['journeys'],
-    queryFn: async (): Promise<Journey[]> => {
-      await sleep(200);
-      return loadJourneys();
-    },
+    queryFn: (): Promise<Journey[]> => fetchTrips(),
   });
 }
 
@@ -25,24 +20,17 @@ export function useJourneyQuery(journeyId: string | undefined) {
   return useQuery({
     queryKey: ['journeys', journeyId],
     enabled: !!journeyId,
-    queryFn: async (): Promise<Journey> => {
-      await sleep(150);
-      const found = loadJourneys().find((j) => j.id === journeyId);
-      if (!found) throw new Error('여정을 찾을 수 없어요.');
-      return found;
-    },
+    queryFn: (): Promise<Journey> => fetchTrip(journeyId!),
   });
 }
 
 export function useCreateJourneyMutation() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (journey: Journey) => {
-      await sleep(150);
-      return addJourney(journey);
-    },
-    onSuccess: (journeys) => {
-      qc.setQueryData(['journeys'], journeys);
+    mutationFn: (input: CreateTripInput) => createTrip(input),
+    onSuccess: (newJourney) => {
+      qc.setQueryData<Journey[]>(['journeys'], (prev = []) => [newJourney, ...prev]);
+      qc.setQueryData(['journeys', newJourney.id], newJourney);
     },
   });
 }
@@ -50,14 +38,12 @@ export function useCreateJourneyMutation() {
 export function useUpdateJourneyMutation() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, patch }: { id: string; patch: Partial<Journey> }) => {
-      await sleep(150);
-      return updateJourney(id, patch);
-    },
-    onSuccess: (journeys, { id }) => {
-      qc.setQueryData(['journeys'], journeys);
-      const updated = journeys.find((j) => j.id === id);
-      if (updated) qc.setQueryData(['journeys', id], updated);
+    mutationFn: ({ id, patch }: { id: string; patch: Partial<Journey> }) => updateTrip(id, patch),
+    onSuccess: (updatedJourney) => {
+      qc.setQueryData<Journey[]>(['journeys'], (prev = []) =>
+        prev.map((j) => (j.id === updatedJourney.id ? updatedJourney : j)),
+      );
+      qc.setQueryData(['journeys', updatedJourney.id], updatedJourney);
     },
   });
 }
@@ -65,12 +51,9 @@ export function useUpdateJourneyMutation() {
 export function useDeleteJourneyMutation() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (id: string) => {
-      await sleep(150);
-      return deleteJourney(id);
-    },
-    onSuccess: (journeys, id) => {
-      qc.setQueryData(['journeys'], journeys);
+    mutationFn: (id: string) => deleteTrip(id),
+    onSuccess: (_, id) => {
+      qc.setQueryData<Journey[]>(['journeys'], (prev = []) => prev.filter((j) => j.id !== id));
       qc.removeQueries({ queryKey: ['journeys', id] });
       qc.removeQueries({ queryKey: ['expenses', id] });
     },
