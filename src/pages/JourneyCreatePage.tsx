@@ -160,9 +160,7 @@ export function JourneyCreatePage() {
       return;
     }
 
-    const id = String(Date.now());
-    await createJourney.mutateAsync({
-      id,
+    const newJourney = await createJourney.mutateAsync({
       name: safeName,
       country,
       currency,
@@ -175,7 +173,7 @@ export function JourneyCreatePage() {
       selfParticipant: selfN,
       budgetKRW: budgetValue,
     });
-    nav(`/journeys/${id}`);
+    nav(`/journeys/${newJourney.id}`);
   };
   async function handleDelete() {
     if (!journeyId) return;
