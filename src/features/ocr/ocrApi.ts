@@ -15,6 +15,20 @@ export type ApiErrorResponse = {
   error: { code: string; detail: string };
 };
 
+export class OcrApiError extends Error {
+  code?: string;
+  status?: number;
+  detail?: string;
+
+  constructor(message: string, options?: { code?: string; status?: number; detail?: string }) {
+    super(message);
+    this.name = 'OcrApiError';
+    this.code = options?.code;
+    this.status = options?.status;
+    this.detail = options?.detail;
+  }
+}
+
 export type OcrParsedResult = {
   merchantName: string;
   totalAmount: number;
@@ -75,6 +89,46 @@ function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null;
 }
 
+function parseApiError(
+  body: unknown,
+): { code?: string; detail?: string; status?: number; message?: string } | null {
+  if (!isRecord(body)) return null;
+  if (body.success !== false) return null;
+  const error = isRecord(body.error) ? body.error : null;
+  return {
+    code: error && typeof error.code === 'string' ? error.code : undefined,
+    detail: error && typeof error.detail === 'string' ? error.detail : undefined,
+    status: typeof body.status === 'number' ? body.status : undefined,
+    message: typeof body.message === 'string' ? body.message : undefined,
+  };
+}
+
+export function getOcrErrorMessage(error: unknown): string {
+  if (error instanceof OcrApiError) {
+    switch (error.code) {
+      case 'OCR_003':
+        return '파일 용량이 너무 커요. 10MB 이하 이미지를 업로드해 주세요.';
+      case 'OCR_004':
+        return '이미지 파일을 다시 선택해 주세요. 손상된 파일일 수 있어요.';
+      case 'OCR_007':
+        return '총액 인식이 어려웠어요. 더 선명한 사진으로 다시 시도해 주세요.';
+      case 'OCR_008':
+        return '해당 OCR 결과에 접근할 권한이 없어요.';
+      case 'OCR_009':
+        return 'OCR 작업을 찾지 못했어요. 다시 스캔해 주세요.';
+      case 'OCR_011':
+        return '여정 정보가 누락되었어요. 다시 시도해 주세요.';
+      case 'AUTH_001':
+        return '로그인이 필요해요.';
+      default:
+        break;
+    }
+    return error.detail || error.message || 'OCR 요청 중 오류가 발생했어요.';
+  }
+  if (error instanceof Error) return error.message;
+  return 'OCR 요청 중 오류가 발생했어요.';
+}
+
 export async function createReceiptOcrJob(params: {
   file: File;
   tripId: string;
@@ -97,26 +151,29 @@ export async function createReceiptOcrJob(params: {
   });
 
   const body = await parseJson(res);
+  const apiError = parseApiError(body);
 
   if (!isRecord(body)) {
-    throw new Error(`OCR 요청 실패 (${res.status})`);
+    throw new OcrApiError(`OCR 요청 실패 (${res.status})`, { status: res.status });
   }
 
-  if (body.success === false && isRecord(body.error)) {
-    const code = typeof body.error.code === 'string' ? body.error.code : '';
-    const detail = typeof body.error.detail === 'string' ? body.error.detail : '';
-    throw new Error(detail ? `${code} ${detail}` : `${code || 'OCR 요청 실패'}`);
+  if (apiError) {
+    throw new OcrApiError(apiError.detail || apiError.message || 'OCR 요청 실패', {
+      code: apiError.code,
+      detail: apiError.detail,
+      status: apiError.status ?? res.status,
+    });
   }
 
   if (body.success !== true || !isRecord(body.data)) {
-    throw new Error(`OCR 요청 실패 (${res.status})`);
+    throw new OcrApiError(`OCR 요청 실패 (${res.status})`, { status: res.status });
   }
 
   const data = body.data as Record<string, unknown>;
   const receiptId = typeof data.receiptId === 'string' ? data.receiptId : '';
   const status = data.status === 'PENDING' ? 'PENDING' : '';
   if (!receiptId || status !== 'PENDING') {
-    throw new Error('OCR 응답 형식이 올바르지 않아요.');
+    throw new OcrApiError('OCR 응답 형식이 올바르지 않아요.');
   }
 
   return { receiptId, status: 'PENDING' };
@@ -133,19 +190,22 @@ export async function getReceiptOcrJob(params: {
   });
 
   const body = await parseJson(res);
+  const apiError = parseApiError(body);
 
   if (!isRecord(body)) {
-    throw new Error(`OCR 조회 실패 (${res.status})`);
+    throw new OcrApiError(`OCR 조회 실패 (${res.status})`, { status: res.status });
   }
 
-  if (body.success === false && isRecord(body.error)) {
-    const code = typeof body.error.code === 'string' ? body.error.code : '';
-    const detail = typeof body.error.detail === 'string' ? body.error.detail : '';
-    throw new Error(detail ? `${code} ${detail}` : `${code || 'OCR 조회 실패'}`);
+  if (apiError) {
+    throw new OcrApiError(apiError.detail || apiError.message || 'OCR 조회 실패', {
+      code: apiError.code,
+      detail: apiError.detail,
+      status: apiError.status ?? res.status,
+    });
   }
 
   if (body.success !== true || !isRecord(body.data)) {
-    throw new Error(`OCR 조회 실패 (${res.status})`);
+    throw new OcrApiError(`OCR 조회 실패 (${res.status})`, { status: res.status });
   }
 
   const data = body.data as Record<string, unknown>;
@@ -186,8 +246,8 @@ export async function pollReceiptOcrJob(
   userId: string,
   options?: PollOcrOptions,
 ): Promise<OcrJobResult> {
-  const intervalMs = options?.intervalMs ?? 1500;
-  const maxAttempts = options?.maxAttempts ?? 45;
+  const baseIntervalMs = options?.intervalMs ?? 1200;
+  const maxAttempts = options?.maxAttempts ?? 55;
 
   for (let i = 0; i < maxAttempts; i++) {
     const job = await getReceiptOcrJob({ receiptId, userId });
@@ -196,8 +256,31 @@ export async function pollReceiptOcrJob(
       return job;
     }
 
-    await new Promise((r) => setTimeout(r, intervalMs));
+    const waitMs = Math.min(baseIntervalMs + i * 200, 3000);
+    await new Promise((r) => setTimeout(r, waitMs));
   }
 
-  throw new Error('OCR 분석 시간이 초과되었어요. 잠시 후 다시 시도해 주세요.');
+  throw new OcrApiError('OCR 분석 시간이 초과되었어요. 잠시 후 다시 시도해 주세요.');
+}
+
+export async function deleteReceiptOcrJob(params: { receiptId: string; userId: string }): Promise<void> {
+  const { receiptId, userId } = params;
+  const res = await fetch(expensesUrl(`expenses/ocr/${encodeURIComponent(receiptId)}`), {
+    method: 'DELETE',
+    headers: { 'x-user-id': userId },
+  });
+
+  const body = await parseJson(res);
+  const apiError = parseApiError(body);
+
+  if (apiError) {
+    throw new OcrApiError(apiError.detail || apiError.message || 'OCR 삭제 실패', {
+      code: apiError.code,
+      detail: apiError.detail,
+      status: apiError.status ?? res.status,
+    });
+  }
+  if (!res.ok) {
+    throw new OcrApiError(`OCR 삭제 실패 (${res.status})`, { status: res.status });
+  }
 }

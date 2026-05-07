@@ -7,6 +7,8 @@ import { useAuth } from '@/features/auth/useAuth';
 import { buildOcrDraftFromParsed, countryToReceiptLocale } from '@/features/ocr/buildDraftFromOcr';
 import {
   createReceiptOcrJob,
+  deleteReceiptOcrJob,
+  getOcrErrorMessage,
   pollReceiptOcrJob,
   validateReceiptFile,
 } from '@/features/ocr/ocrApi';
@@ -22,6 +24,19 @@ export function ScanPage() {
   const [isScanning, setIsScanning] = useState(false);
   const cameraInputRef = useRef<HTMLInputElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const activeReceiptIdRef = useRef<string | null>(null);
+
+  const cleanupActiveOcrJob = async (userId: string) => {
+    const receiptId = activeReceiptIdRef.current;
+    if (!receiptId) return;
+    try {
+      await deleteReceiptOcrJob({ receiptId, userId });
+    } catch {
+      // 정리 실패해도 사용자 플로우는 계속 진행
+    } finally {
+      activeReceiptIdRef.current = null;
+    }
+  };
 
   const handlePick = async (file: File) => {
     if (!journeyId || !journey) {
@@ -52,6 +67,7 @@ export function ScanPage() {
         currencyHint: journey.currency,
         receiptLocale,
       });
+      activeReceiptIdRef.current = receiptId;
 
       const job = await pollReceiptOcrJob(receiptId, uid, {
         intervalMs: 1500,
@@ -61,21 +77,23 @@ export function ScanPage() {
       if (job.status === 'FAILED' || job.status === 'EXPIRED') {
         const msg = job.failure?.detail ?? 'OCR 처리에 실패했어요.';
         showToast(msg);
+        await cleanupActiveOcrJob(uid);
         setIsScanning(false);
         return;
       }
 
       if (job.status !== 'SUCCESS' || !job.result) {
         showToast('OCR 결과를 받지 못했어요.');
+        await cleanupActiveOcrJob(uid);
         setIsScanning(false);
         return;
       }
 
       const draft = buildOcrDraftFromParsed(journey, job.result);
-      nav(`/journeys/${journeyId}/ocr-preview`, { state: { draft, imageDataUrl } });
+      nav(`/journeys/${journeyId}/ocr-preview`, { state: { draft, imageDataUrl, receiptId } });
     } catch (e) {
-      const msg = e instanceof Error ? e.message : 'OCR 요청 중 오류가 났어요.';
-      showToast(msg);
+      if (uid) await cleanupActiveOcrJob(uid);
+      showToast(getOcrErrorMessage(e));
     } finally {
       setIsScanning(false);
     }
@@ -85,7 +103,15 @@ export function ScanPage() {
     <div className="fixed inset-0 z-50 mx-auto flex h-dvh w-full max-w-md flex-col bg-slate-900">
       <ToastPortal toasts={toasts} />
       <div className="flex items-center justify-between p-6 pt-12 text-white">
-        <button type="button" onClick={() => nav(-1)} aria-label="닫기">
+        <button
+          type="button"
+          onClick={async () => {
+            const uid = user?.id?.trim();
+            if (uid) await cleanupActiveOcrJob(uid);
+            nav(-1);
+          }}
+          aria-label="닫기"
+        >
           <X className="size-6" />
         </button>
         <span className="font-black tracking-tight">영수증 딸깍 스캔</span>

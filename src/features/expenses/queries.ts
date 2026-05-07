@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { Expense } from '@/features/expenses/types';
+import { ExpenseApiError, createExpenseApi, patchExpenseApi } from '@/features/expenses/expensesApi';
 import {
   addExpense,
   deleteExpense,
@@ -33,15 +34,25 @@ export function useAllExpensesQuery() {
   });
 }
 
-export function useAddExpenseMutation() {
+export function useAddExpenseMutation(userId?: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (expense: Expense) => {
       await sleep(100);
-      return addExpense(expense);
+      if (!userId) {
+        return addExpense(expense).find((e) => e.id === expense.id) ?? expense;
+      }
+      try {
+        return await createExpenseApi({ expense, userId });
+      } catch (error) {
+        if (error instanceof ExpenseApiError && error.status !== 404) throw error;
+        // 백엔드 /expenses 미구현(404) 환경에서는 로컬 저장으로 폴백
+        return addExpense(expense).find((e) => e.id === expense.id) ?? expense;
+      }
     },
-    onSuccess: (_all, expense) => {
-      qc.invalidateQueries({ queryKey: ['expenses', expense.journeyId] });
+    onSuccess: (saved) => {
+      qc.setQueryData(['expense', saved.id], saved);
+      qc.invalidateQueries({ queryKey: ['expenses', saved.journeyId] });
       qc.invalidateQueries({ queryKey: ['expenses'] });
     },
   });
@@ -60,12 +71,40 @@ export function useExpenseQuery(expenseId: string | undefined) {
   });
 }
 
-export function useUpdateExpenseMutation() {
+export function useUpdateExpenseMutation(userId?: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, patch }: { id: string; patch: Partial<Expense> }) => {
+    mutationFn: async ({
+      id,
+      patch,
+    }: {
+      id: string;
+      patch: Omit<Partial<Expense>, 'receiptId'> & { journeyId: string; receiptId?: string | null };
+    }) => {
       await sleep(100);
-      const all = updateExpense(id, patch);
+      const current = findExpenseById(id);
+      if (!current) throw new Error('소비 내역을 찾을 수 없어요.');
+      const fallback: Expense = {
+        ...current,
+        ...patch,
+        id,
+        receiptId:
+          patch.receiptId === null ? undefined : patch.receiptId === undefined ? current.receiptId : patch.receiptId,
+        updatedAt: new Date().toISOString(),
+      };
+      if (userId) {
+        try {
+          return await patchExpenseApi({ expenseId: id, patch, fallback, userId });
+        } catch (error) {
+          if (error instanceof ExpenseApiError && error.status !== 404) throw error;
+          // 백엔드 /expenses 미구현(404) 환경에서는 로컬 저장으로 폴백
+        }
+      }
+      const storagePatch: Partial<Expense> = {
+        ...patch,
+        receiptId: patch.receiptId === null ? undefined : patch.receiptId,
+      };
+      const all = updateExpense(id, storagePatch);
       return all.find((e) => e.id === id)!;
     },
     onSuccess: (updated) => {
