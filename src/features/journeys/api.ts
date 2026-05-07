@@ -1,28 +1,30 @@
-import { apiClient } from '@/lib/apiClient';
+import { apiFetch } from '@/lib/api';
 import type { Journey } from './types';
 
 export async function fetchTrips(): Promise<Journey[]> {
-  const { data } = await apiClient.get<Journey[]>('/trips');
-  return data;
+  return apiFetch<Journey[]>('/trips');
 }
 
 export async function fetchTrip(tripId: string): Promise<Journey> {
-  const { data } = await apiClient.get<Journey>(`/trips/${tripId}`);
-  return data;
-}
-
-export async function updateTrip(tripId: string, patch: Partial<Journey>): Promise<Journey> {
-  const { data } = await apiClient.patch<Journey>(`/trips/${tripId}`, patch);
-  return data;
-}
-
-export async function deleteTrip(tripId: string): Promise<void> {
-  await apiClient.delete(`/trips/${tripId}`);
+  return apiFetch<Journey>(`/trips/${tripId}`);
 }
 
 export type CreateTripInput = Omit<Journey, 'id'>;
 
 export async function createTrip(input: CreateTripInput): Promise<Journey> {
-  const { data } = await apiClient.post<Journey>('/trips', input);
-  return data;
+  return apiFetch<Journey>('/trips', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}
+
+export async function updateTrip(tripId: string, patch: Partial<Journey>): Promise<Journey> {
+  return apiFetch<Journey>(`/trips/${tripId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(patch),
+  });
+}
+
+export async function deleteTrip(tripId: string): Promise<void> {
+  return apiFetch<void>(`/trips/${tripId}`, { method: 'DELETE' });
 }
