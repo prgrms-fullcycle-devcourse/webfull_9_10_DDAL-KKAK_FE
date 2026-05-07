@@ -38,7 +38,7 @@ export function InsightPage() {
     return { title, topCat, topRatio, lateRatio };
   }, [expenses]);
 
-  if (!journey) return null;
+  if (!journey) return <InsightSkeleton />;
 
   return (
     <div className="min-h-dvh bg-slate-50 pb-10">
@@ -93,6 +93,50 @@ export function InsightPage() {
               </p>
             </div>
           </div>
+        </section>
+      </main>
+    </div>
+  );
+}
+
+/**
+ * InsightPage 로딩 중 스켈레톤.
+ * - 큰 타이틀 카드 + 통계 그리드 모사
+ */
+function InsightSkeleton() {
+  return (
+    <div className="min-h-dvh bg-slate-50 pb-10">
+      {/* TopBar 스켈레톤 */}
+      <header className="sticky top-0 z-20 border-b border-slate-100 bg-white/90 backdrop-blur">
+        <div className="flex items-center gap-3 px-6 pb-5 pt-12">
+          <div className="size-7 animate-pulse rounded-xl bg-slate-100" />
+          <div className="h-4 w-40 animate-pulse rounded-lg bg-slate-100" />
+        </div>
+      </header>
+
+      <main className="space-y-6 px-6 py-6">
+        {/* 메인 타이틀 카드 */}
+        <section className="rounded-[40px] border border-slate-100 bg-white p-8">
+          <div className="mb-2 h-3 w-32 animate-pulse rounded bg-slate-200" />
+          <div className="mb-4 h-8 w-44 animate-pulse rounded-lg bg-slate-200" />
+          <div className="space-y-2">
+            <div className="h-3 w-full animate-pulse rounded bg-slate-100" />
+            <div className="h-3 w-5/6 animate-pulse rounded bg-slate-100" />
+            <div className="h-3 w-3/4 animate-pulse rounded bg-slate-100" />
+          </div>
+        </section>
+
+        {/* 통계 그리드 */}
+        <section className="grid grid-cols-2 gap-3">
+          {[1, 2, 3, 4].map((i) => (
+            <div
+              key={i}
+              className="animate-pulse rounded-2xl border border-slate-100 bg-white p-4"
+            >
+              <div className="mb-2 h-3 w-16 rounded bg-slate-200" />
+              <div className="h-5 w-20 rounded bg-slate-200" />
+            </div>
+          ))}
         </section>
       </main>
     </div>
