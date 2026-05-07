@@ -77,8 +77,6 @@ export function ReportPage() {
 
   const myNetLocal = data.nets.find((n) => n.person === selfName)?.netLocal ?? 0;
   const myNetKRW = Math.round(myNetLocal * journey.rate);
-  const settleTone: 'credit' | 'debit' | 'none' =
-    myNetKRW > 0 ? 'credit' : myNetKRW < 0 ? 'debit' : 'none';
 
   const tripDateRange = `${journey.startDate.replaceAll('-', '.')} ~ ${journey.endDate.replaceAll('-', '.')}`;
 
