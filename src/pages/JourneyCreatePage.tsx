@@ -9,7 +9,7 @@ import {
   useJourneyQuery,
   useUpdateJourneyMutation,
 } from '@/features/journeys/queries';
-import { demoRateForCurrency } from '@/lib/currencyRates';
+import { demoRateForCurrency, getRealtimeRate } from '@/lib/currencyRates';
 import { useAuth } from '@/features/auth/useAuth';
 
 const CURRENCIES: { code: CurrencyCode; label: string }[] = [
@@ -129,7 +129,8 @@ export function JourneyCreatePage() {
 
   const handleSubmit = async () => {
     const safeName = name.trim() || destination.trim() || country || '새 여행';
-    const rate = effectiveRate();
+    const rate =
+      rateMode === 'realtime' ? await getRealtimeRate(currency, 'KRW') : effectiveRate();
     const plist = participants.length ? participants : [authName || '나'];
     // 수정 모드: 기존 selfParticipant 유지 (영수증 payer/splitWith와의 일관성).
     // 신규: 로그인 사용자명을 self로.

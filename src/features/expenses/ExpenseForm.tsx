@@ -11,6 +11,8 @@ import { TopBar } from '@/components/layout/TopBar';
 import { ToastPortal } from '@/components/ui/Toast';
 import { useToast } from '@/components/ui/useToast';
 import { nowLocalIso, toStoredWallClock } from '@/lib/datetime';
+import { useAuth } from '@/features/auth/useAuth';
+import { getExpenseErrorMessage } from '@/features/expenses/expensesApi';
 
 type Mode = 'create' | 'edit' | 'ocr';
 
@@ -35,9 +37,10 @@ export function ExpenseForm({
 }: ExpenseFormProps) {
   const { data: journey } = useJourneyQuery(journeyId);
   const { data: existing } = useExpenseQuery(mode === 'edit' ? expenseId : undefined);
+  const { user } = useAuth();
 
-  const addMut = useAddExpenseMutation();
-  const updateMut = useUpdateExpenseMutation();
+  const addMut = useAddExpenseMutation(user?.id);
+  const updateMut = useUpdateExpenseMutation(user?.id);
   const deleteMut = useDeleteExpenseMutation();
 
   const saving = addMut.isPending || updateMut.isPending || deleteMut.isPending;
@@ -117,6 +120,7 @@ export function ExpenseForm({
   const [splitWith, setSplitWith] = useState<string[]>([]);
   const [method, setMethod] = useState<'cash' | 'card'>('card');
   const [comment, setComment] = useState('');
+  const [receiptId, setReceiptId] = useState<string>('');
 
   // ── prefill: journey 로드되면 기본 payer/splitWith 세팅 ──
   useEffect(() => {
@@ -140,6 +144,7 @@ export function ExpenseForm({
     if (src.splitWith) setSplitWith(src.splitWith);
     if (src.method) setMethod(src.method);
     if (src.comment) setComment(src.comment);
+    if (src.receiptId) setReceiptId(src.receiptId);
   }, [existing, initialDraft]);
 
   // ── 계산 ──
@@ -174,41 +179,32 @@ export function ExpenseForm({
       return;
     }
 
+    const now = new Date().toISOString();
+    const payload: Expense = {
+      id: expenseId ?? crypto.randomUUID(),
+      journeyId,
+      emoji,
+      storeName: storeName.trim() || '(이름 없음)',
+      category: '기타',
+      amountLocal,
+      currency: journey.currency,
+      paidAt: toStoredWallClock(paidAt),
+      payer,
+      splitMode,
+      splitWith: splitMode === 'personal' ? [payer] : splitWith,
+      method: 'cash',
+      comment: comment.trim() || undefined,
+      receiptImageUrl: undefined,
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+    };
+
     if (mode === 'edit' && expenseId) {
-      const now = new Date().toISOString();
-      const patch: Partial<Expense> = {
-        emoji,
-        storeName: storeName.trim() || '(이름 없음)',
-        category: '기타',
-        amountLocal: amountLocal as number,
-        currency: journey.currency,
-        paidAt: toStoredWallClock(paidAt),
-        payer,
-        splitMode,
-        splitWith: splitMode === 'personal' ? [payer] : splitWith,
-        method,
-        comment: comment.trim() || undefined,
-        updatedAt: now,
-      };
-      const saved = await updateMut.mutateAsync({ id: expenseId, patch });
+      const saved = await updateMut.mutateAsync({ id: expenseId, patch: payload });
       onSaved(saved);
     } else {
-      const created = await addMut.mutateAsync({
-        journeyId,
-        emoji,
-        storeName: storeName.trim() || '(이름 없음)',
-        category: '기타',
-        amountLocal: amountLocal as number,
-        currency: journey.currency,
-        paidAt: toStoredWallClock(paidAt),
-        payer,
-        splitMode,
-        splitWith: splitMode === 'personal' ? [payer] : splitWith,
-        method,
-        comment: comment.trim() || undefined,
-        receiptImageUrl: undefined,
-      });
-      onSaved(created);
+      await addMut.mutateAsync(payload);
+      onSaved(payload);
     }
   }
 
@@ -227,11 +223,7 @@ export function ExpenseForm({
       <TopBar
         title={
           <span>
-            {mode === 'edit'
-              ? '지출 내역 수정'
-              : mode === 'ocr'
-                ? '영수증 확인'
-                : '지출 내역 추가'}
+            {mode === 'edit' ? '지출 내역 수정' : mode === 'ocr' ? '영수증 확인' : '지출 내역 추가'}
           </span>
         }
         onBack={onCanceled}
@@ -457,6 +449,29 @@ export function ExpenseForm({
         </section>
 
         {/* 코멘트 */}
+        <section>
+          <label className="mb-2 block text-[10px] font-black uppercase tracking-widest text-slate-400">
+            OCR Receipt ID (선택)
+          </label>
+          <div className="space-y-2">
+            <input
+              value={receiptId}
+              onChange={(e) => setReceiptId(e.target.value)}
+              placeholder="예: cma...."
+              className="w-full rounded-2xl border border-slate-100 bg-slate-50 p-4 text-sm font-bold outline-none"
+            />
+            {isEdit ? (
+              <button
+                type="button"
+                onClick={() => setReceiptId('')}
+                className="text-xs font-black text-slate-400 underline"
+              >
+                영수증 연결 해제 (PATCH 시 receiptId: null)
+              </button>
+            ) : null}
+          </div>
+        </section>
+
         <section>
           <label className="mb-2 block text-[10px] font-black uppercase tracking-widest text-slate-400">
             코멘트 (선택)
