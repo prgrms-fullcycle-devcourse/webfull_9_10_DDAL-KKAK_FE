@@ -1,6 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { Expense } from '@/features/expenses/types';
-import { ExpenseApiError, createExpenseApi, patchExpenseApi } from '@/features/expenses/expensesApi';
+import {
+  ExpenseApiError,
+  createExpenseApi,
+  patchExpenseApi,
+} from '@/features/expenses/expensesApi';
 import {
   addExpense,
   deleteExpense,
@@ -89,7 +93,11 @@ export function useUpdateExpenseMutation(userId?: string) {
         ...patch,
         id,
         receiptId:
-          patch.receiptId === null ? undefined : patch.receiptId === undefined ? current.receiptId : patch.receiptId,
+          patch.receiptId === null
+            ? undefined
+            : patch.receiptId === undefined
+              ? current.receiptId
+              : patch.receiptId,
         updatedAt: new Date().toISOString(),
       };
       if (userId) {
