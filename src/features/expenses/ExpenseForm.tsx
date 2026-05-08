@@ -202,13 +202,19 @@ export function ExpenseForm({
 
     try {
       if (mode === 'edit' && expenseId) {
+        const initialReceiptId = existing?.receiptId?.trim() ?? '';
+        const nextReceiptId = receiptId.trim();
+        let receiptPatch: { receiptId?: string | null } = {};
+        if (nextReceiptId !== initialReceiptId) {
+          receiptPatch = { receiptId: nextReceiptId || null };
+        }
         const patchPayload: Omit<Partial<Expense>, 'receiptId'> & {
           journeyId: string;
           receiptId?: string | null;
         } = {
           ...payload,
           journeyId,
-          receiptId: receiptId.trim() || null,
+          ...receiptPatch,
         };
         const saved = await updateMut.mutateAsync({
           id: expenseId,

@@ -1,4 +1,4 @@
-import axios from 'axios';
+import axios, { AxiosHeaders, type InternalAxiosRequestConfig } from 'axios';
 import { env } from '@/config/env';
 
 const TOKEN_KEY = 'tt_token_v1';
@@ -10,10 +10,13 @@ export const apiClient = axios.create({
   },
 });
 
-apiClient.interceptors.request.use((config) => {
+apiClient.interceptors.request.use((config: InternalAxiosRequestConfig) => {
   const token = localStorage.getItem(TOKEN_KEY);
   if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
+    if (!config.headers) {
+      config.headers = new AxiosHeaders();
+    }
+    config.headers.set('Authorization', `Bearer ${token}`);
   }
   return config;
 });

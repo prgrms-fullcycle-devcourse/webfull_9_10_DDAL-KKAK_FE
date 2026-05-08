@@ -106,10 +106,20 @@ function fromApiExpense(raw: unknown, fallback: Expense): Expense {
 export function getExpenseErrorMessage(error: unknown): string {
   if (error instanceof ExpenseApiError) {
     switch (error.code) {
+      case 'EXP_001':
+        return '입력값을 확인해주세요.';
+      case 'EXP_002':
+        return '유효하지 않은 영수증 또는 여행입니다.';
+      case 'EXP_003':
+        return '해당 영수증/지출에 접근 권한이 없습니다.';
       case 'EXP_004':
         return '이미 다른 지출에 연결된 영수증이에요.';
+      case 'EXP_005':
+        return '지출자 정보가 현재 여행과 일치하지 않습니다.';
       case 'EXP_006':
         return 'OCR이 아직 완료되지 않았어요. 잠시 후 다시 시도해 주세요.';
+      case 'EXP_007':
+        return '수정할 지출을 찾을 수 없습니다.';
       default:
         return error.detail || error.message || '지출 저장 중 오류가 발생했어요.';
     }
