@@ -10,6 +10,11 @@ export type Journey = {
   startDate: string;
   endDate: string;
   participants: string[];
+  /**
+   * 참가자 이름 -> participant PK(id) 매핑.
+   * 백엔드가 participants를 객체 배열로 내려줄 때 프론트에서 파생해 채운다.
+   */
+  participantIdsByName?: Record<string, string>;
   selfParticipant?: string;
   status: 'active' | 'planned' | 'ended';
   /**

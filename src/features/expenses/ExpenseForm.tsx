@@ -35,13 +35,13 @@ export function ExpenseForm({
   onSaved,
   onCanceled,
 }: ExpenseFormProps) {
-  const { data: journey } = useJourneyQuery(journeyId);
-  const { data: existing } = useExpenseQuery(mode === 'edit' ? expenseId : undefined);
   const { user } = useAuth();
+  const { data: journey } = useJourneyQuery(journeyId);
+  const { data: existing } = useExpenseQuery(mode === 'edit' ? expenseId : undefined, user?.id);
 
   const addMut = useAddExpenseMutation(user?.id);
   const updateMut = useUpdateExpenseMutation(user?.id);
-  const deleteMut = useDeleteExpenseMutation();
+  const deleteMut = useDeleteExpenseMutation(user?.id);
 
   const saving = addMut.isPending || updateMut.isPending || deleteMut.isPending;
   const { showToast, toasts } = useToast();
@@ -162,6 +162,11 @@ export function ExpenseForm({
 
   const myShareKRW = Math.round(myShareLocal * rate);
   const participants = journey?.participants ?? [];
+  const resolveParticipantId = (name: string): string => {
+    const byName = journey?.participantIdsByName;
+    if (!byName) return name;
+    return byName[name] ?? name;
+  };
 
   // ── 핸들러 ──
   async function handleSubmit() {
@@ -191,11 +196,15 @@ export function ExpenseForm({
       currency: journey.currency,
       paidAt: toStoredWallClock(paidAt),
       payer,
+      payerParticipantId: resolveParticipantId(payer),
       splitMode,
       splitWith: splitMode === 'personal' ? [payer] : splitWith,
       method,
       comment: comment.trim() || undefined,
       receiptImageUrl: undefined,
+      fxMode: journey.rateMode === 'fixed' ? 'FIXED' : 'REALTIME',
+      fxRateTripToKrw: journey.rate,
+      amountKrw: Math.round(amountLocal * journey.rate),
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
     };
