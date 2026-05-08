@@ -192,7 +192,7 @@ export function ExpenseForm({
       payer,
       splitMode,
       splitWith: splitMode === 'personal' ? [payer] : splitWith,
-      method: 'cash',
+      method,
       comment: comment.trim() || undefined,
       receiptImageUrl: undefined,
       createdAt: existing?.createdAt ?? now,
@@ -203,8 +203,8 @@ export function ExpenseForm({
       const saved = await updateMut.mutateAsync({ id: expenseId, patch: payload });
       onSaved(saved);
     } else {
-      await addMut.mutateAsync(payload);
-      onSaved(payload);
+      const saved = await addMut.mutateAsync(payload);
+      onSaved(saved);
     }
   }
 

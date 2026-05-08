@@ -6,11 +6,7 @@ import {
   patchExpenseApi,
 } from '@/features/expenses/expensesApi';
 import {
-  ExpenseApiError,
-  createExpenseApi,
-  patchExpenseApi,
-} from '@/features/expenses/expensesApi';
-import {
+  addExpense,
   deleteExpense,
   findExpenseById,
   loadAllExpenses,
