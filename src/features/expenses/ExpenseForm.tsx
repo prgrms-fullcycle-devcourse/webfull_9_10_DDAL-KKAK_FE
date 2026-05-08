@@ -174,32 +174,41 @@ export function ExpenseForm({
       return;
     }
 
-    const now = new Date().toISOString();
-    const payload: Expense = {
-      id: expenseId ?? crypto.randomUUID(),
-      journeyId,
-      emoji,
-      storeName: storeName.trim() || '(이름 없음)',
-      category: '기타',
-      amountLocal,
-      currency: journey.currency,
-      paidAt: toStoredWallClock(paidAt),
-      payer,
-      splitMode,
-      splitWith: splitMode === 'personal' ? [payer] : splitWith,
-      method: 'cash',
-      comment: comment.trim() || undefined,
-      receiptImageUrl: undefined,
-      createdAt: existing?.createdAt ?? now,
-      updatedAt: now,
-    };
-
     if (mode === 'edit' && expenseId) {
-      const saved = await updateMut.mutateAsync({ id: expenseId, patch: payload });
+      const now = new Date().toISOString();
+      const patch: Partial<Expense> = {
+        emoji,
+        storeName: storeName.trim() || '(이름 없음)',
+        category: '기타',
+        amountLocal: amountLocal as number,
+        currency: journey.currency,
+        paidAt: toStoredWallClock(paidAt),
+        payer,
+        splitMode,
+        splitWith: splitMode === 'personal' ? [payer] : splitWith,
+        method,
+        comment: comment.trim() || undefined,
+        updatedAt: now,
+      };
+      const saved = await updateMut.mutateAsync({ id: expenseId, patch });
       onSaved(saved);
     } else {
-      await addMut.mutateAsync(payload);
-      onSaved(payload);
+      const created = await addMut.mutateAsync({
+        journeyId,
+        emoji,
+        storeName: storeName.trim() || '(이름 없음)',
+        category: '기타',
+        amountLocal: amountLocal as number,
+        currency: journey.currency,
+        paidAt: toStoredWallClock(paidAt),
+        payer,
+        splitMode,
+        splitWith: splitMode === 'personal' ? [payer] : splitWith,
+        method,
+        comment: comment.trim() || undefined,
+        receiptImageUrl: undefined,
+      });
+      onSaved(created);
     }
   }
 

@@ -1,12 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { Expense } from '@/features/expenses/types';
 import {
-  addExpense,
   deleteExpense,
   findExpenseById,
   loadAllExpenses,
   updateExpense,
 } from '@/features/expenses/storage';
+import { createExpense, type CreateExpenseInput } from '@/features/expenses/api';
 
 async function sleep(ms: number) {
   await new Promise((r) => setTimeout(r, ms));
@@ -36,12 +36,9 @@ export function useAllExpensesQuery() {
 export function useAddExpenseMutation() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (expense: Expense) => {
-      await sleep(100);
-      return addExpense(expense);
-    },
-    onSuccess: (_all, expense) => {
-      qc.invalidateQueries({ queryKey: ['expenses', expense.journeyId] });
+    mutationFn: (input: CreateExpenseInput) => createExpense(input),
+    onSuccess: (newExpense) => {
+      qc.invalidateQueries({ queryKey: ['expenses', newExpense.journeyId] });
       qc.invalidateQueries({ queryKey: ['expenses'] });
     },
   });
