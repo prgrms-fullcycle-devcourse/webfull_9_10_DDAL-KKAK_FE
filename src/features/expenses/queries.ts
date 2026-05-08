@@ -36,7 +36,11 @@ export function useExpensesQuery(journeyId: string | undefined, userId?: string)
       try {
         return await listExpensesApi({ tripId: journeyId, userId });
       } catch (error) {
-        if (shouldUseExpenseFallback() && error instanceof ExpenseApiError && error.status === 404) {
+        if (
+          shouldUseExpenseFallback() &&
+          error instanceof ExpenseApiError &&
+          error.status === 404
+        ) {
           return loadAllExpenses().filter((e) => e.journeyId === journeyId);
         }
         throw error;
@@ -53,10 +57,16 @@ export function useAllExpensesQuery(userId?: string) {
       if (!userId) return loadAllExpenses();
       try {
         const tripIds = loadJourneys().map((j) => j.id);
-        const rows = await Promise.all(tripIds.map((tripId) => listExpensesApi({ tripId, userId })));
+        const rows = await Promise.all(
+          tripIds.map((tripId) => listExpensesApi({ tripId, userId })),
+        );
         return rows.flat();
       } catch (error) {
-        if (shouldUseExpenseFallback() && error instanceof ExpenseApiError && error.status === 404) {
+        if (
+          shouldUseExpenseFallback() &&
+          error instanceof ExpenseApiError &&
+          error.status === 404
+        ) {
           return loadAllExpenses();
         }
         throw error;
@@ -104,7 +114,11 @@ export function useExpenseQuery(expenseId: string | undefined, userId?: string) 
           return await getExpenseApi({ expenseId, userId });
         } catch (error) {
           if (
-            !(shouldUseExpenseFallback() && error instanceof ExpenseApiError && error.status === 404)
+            !(
+              shouldUseExpenseFallback() &&
+              error instanceof ExpenseApiError &&
+              error.status === 404
+            )
           ) {
             throw error;
           }
@@ -135,7 +149,11 @@ export function useUpdateExpenseMutation(userId?: string) {
         ...patch,
         id,
         receiptId:
-          patch.receiptId === null ? undefined : patch.receiptId === undefined ? current.receiptId : patch.receiptId,
+          patch.receiptId === null
+            ? undefined
+            : patch.receiptId === undefined
+              ? current.receiptId
+              : patch.receiptId,
         updatedAt: new Date().toISOString(),
       };
       if (userId) {
@@ -143,7 +161,11 @@ export function useUpdateExpenseMutation(userId?: string) {
           return await patchExpenseApi({ expenseId: id, patch, fallback, userId });
         } catch (error) {
           if (
-            !(shouldUseExpenseFallback() && error instanceof ExpenseApiError && error.status === 404)
+            !(
+              shouldUseExpenseFallback() &&
+              error instanceof ExpenseApiError &&
+              error.status === 404
+            )
           ) {
             throw error;
           }
@@ -175,7 +197,11 @@ export function useDeleteExpenseMutation(userId?: string) {
           await deleteExpenseApi({ expenseId: id, userId });
         } catch (error) {
           if (
-            !(shouldUseExpenseFallback() && error instanceof ExpenseApiError && error.status === 404)
+            !(
+              shouldUseExpenseFallback() &&
+              error instanceof ExpenseApiError &&
+              error.status === 404
+            )
           ) {
             throw error;
           }
