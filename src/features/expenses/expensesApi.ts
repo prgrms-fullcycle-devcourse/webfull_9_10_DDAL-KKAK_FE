@@ -62,18 +62,37 @@ function toExpensePayload(
     | (Partial<Expense> & { journeyId: string })
     | (Omit<Partial<Expense>, 'receiptId'> & { journeyId: string; receiptId?: string | null }),
 ) {
+  const amountOriginal =
+    'amountLocal' in expense && expense.amountLocal !== undefined ? Number(expense.amountLocal) : undefined;
+  const fxRate =
+    'fxRateTripToKrw' in expense && expense.fxRateTripToKrw !== undefined
+      ? Number(expense.fxRateTripToKrw)
+      : undefined;
+  const amountKrw =
+    'amountKrw' in expense && expense.amountKrw !== undefined
+      ? Number(expense.amountKrw)
+      : amountOriginal !== undefined && fxRate !== undefined
+        ? Math.round(amountOriginal * fxRate)
+        : undefined;
   const payload: Record<string, unknown> = {
     tripId: expense.journeyId,
   };
   if ('receiptId' in expense) payload.receiptId = expense.receiptId;
   if ('storeName' in expense && expense.storeName !== undefined) payload.title = expense.storeName;
-  if ('amountLocal' in expense && expense.amountLocal !== undefined) {
-    payload.amountOriginal = expense.amountLocal;
+  if (amountOriginal !== undefined) payload.amountOriginal = amountOriginal;
+  if ('currency' in expense && expense.currency !== undefined) {
+    payload.currency = expense.currency === 'KRW' ? 'KRW' : 'TRIP';
   }
-  if ('currency' in expense && expense.currency !== undefined) payload.currency = expense.currency;
   if ('paidAt' in expense && expense.paidAt !== undefined) payload.spentAt = expense.paidAt;
   if ('comment' in expense && expense.comment !== undefined) payload.note = expense.comment;
-  if ('payer' in expense && expense.payer !== undefined) payload.payer = expense.payer;
+  if ('payerParticipantId' in expense && expense.payerParticipantId !== undefined) {
+    payload.payerParticipantId = expense.payerParticipantId;
+  } else if ('payer' in expense && expense.payer !== undefined) {
+    payload.payerParticipantId = expense.payer;
+  }
+  if (fxRate !== undefined) payload.fxRateTripToKrw = fxRate;
+  if (amountKrw !== undefined) payload.amountKrw = amountKrw;
+  if ('fxMode' in expense && expense.fxMode !== undefined) payload.fxMode = expense.fxMode;
   if ('splitMode' in expense && expense.splitMode !== undefined) payload.splitMode = expense.splitMode;
   if ('splitWith' in expense && expense.splitWith !== undefined) payload.splitWith = expense.splitWith;
   if ('method' in expense && expense.method !== undefined) payload.method = expense.method;
@@ -84,6 +103,13 @@ function toExpensePayload(
 
 function fromApiExpense(raw: unknown, fallback: Expense): Expense {
   if (!isRecord(raw)) return fallback;
+  const apiCurrency = typeof raw.currency === 'string' ? raw.currency : '';
+  const mappedCurrency =
+    apiCurrency === 'KRW'
+      ? 'KRW'
+      : apiCurrency === 'TRIP'
+        ? fallback.currency
+        : (apiCurrency as Expense['currency']);
   return {
     ...fallback,
     id: typeof raw.id === 'string' ? raw.id : fallback.id,
@@ -95,12 +121,92 @@ function fromApiExpense(raw: unknown, fallback: Expense): Expense {
       typeof raw.amountOriginal === 'number'
         ? raw.amountOriginal
         : Number(raw.amountOriginal) || fallback.amountLocal,
-    currency: typeof raw.currency === 'string' ? (raw.currency as Expense['currency']) : fallback.currency,
+    currency: mappedCurrency || fallback.currency,
     paidAt: typeof raw.spentAt === 'string' ? raw.spentAt : fallback.paidAt,
+    payerParticipantId:
+      typeof raw.payerParticipantId === 'string' ? raw.payerParticipantId : fallback.payerParticipantId,
+    payer: typeof raw.payerParticipantId === 'string' ? raw.payerParticipantId : fallback.payer,
     comment: typeof raw.note === 'string' ? raw.note : fallback.comment,
+    fxMode: raw.fxMode === 'FIXED' || raw.fxMode === 'REALTIME' ? raw.fxMode : fallback.fxMode,
+    fxRateTripToKrw:
+      typeof raw.fxRateTripToKrw === 'number'
+        ? raw.fxRateTripToKrw
+        : Number(raw.fxRateTripToKrw) || fallback.fxRateTripToKrw,
+    amountKrw: typeof raw.amountKrw === 'number' ? raw.amountKrw : Number(raw.amountKrw) || fallback.amountKrw,
     updatedAt: typeof raw.updatedAt === 'string' ? raw.updatedAt : fallback.updatedAt,
     createdAt: typeof raw.createdAt === 'string' ? raw.createdAt : fallback.createdAt,
   };
+}
+
+export async function listExpensesApi(params: { tripId: string; userId: string }): Promise<Expense[]> {
+  const res = await fetch(expensesUrl(`expenses?tripId=${encodeURIComponent(params.tripId)}`), {
+    method: 'GET',
+    headers: { 'x-user-id': params.userId },
+  });
+  const body = await parseJson(res);
+  const mapped = mapExpenseError(body);
+  if (mapped) throw mapped;
+  if (!res.ok) throw new ExpenseApiError(`지출 목록 조회 실패 (${res.status})`, { status: res.status });
+  if (!isRecord(body) || body.success !== true || !Array.isArray(body.data)) return [];
+  return body.data
+    .map((row) =>
+      fromApiExpense(row, {
+        id: typeof row?.id === 'string' ? row.id : crypto.randomUUID(),
+        journeyId: params.tripId,
+        emoji: '🧾',
+        storeName: '지출',
+        amountLocal: 0,
+        currency: 'KRW',
+        paidAt: new Date().toISOString(),
+        payer: '나',
+        splitMode: 'personal',
+        splitWith: ['나'],
+        method: 'card',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      }),
+    )
+    .sort((a, b) => (a.paidAt < b.paidAt ? 1 : -1));
+}
+
+export async function getExpenseApi(params: { expenseId: string; userId: string }): Promise<Expense> {
+  const res = await fetch(expensesUrl(`expenses/${encodeURIComponent(params.expenseId)}`), {
+    method: 'GET',
+    headers: { 'x-user-id': params.userId },
+  });
+  const body = await parseJson(res);
+  const mapped = mapExpenseError(body);
+  if (mapped) throw mapped;
+  if (!res.ok) throw new ExpenseApiError(`지출 조회 실패 (${res.status})`, { status: res.status });
+  if (!isRecord(body) || body.success !== true || !isRecord(body.data)) {
+    throw new ExpenseApiError('지출 응답 형식이 올바르지 않아요.');
+  }
+  return fromApiExpense(body.data, {
+    id: params.expenseId,
+    journeyId: typeof body.data.tripId === 'string' ? body.data.tripId : '',
+    emoji: '🧾',
+    storeName: '지출',
+    amountLocal: 0,
+    currency: 'KRW',
+    paidAt: new Date().toISOString(),
+    payer: '나',
+    splitMode: 'personal',
+    splitWith: ['나'],
+    method: 'card',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  });
+}
+
+export async function deleteExpenseApi(params: { expenseId: string; userId: string }): Promise<void> {
+  const res = await fetch(expensesUrl(`expenses/${encodeURIComponent(params.expenseId)}`), {
+    method: 'DELETE',
+    headers: { 'x-user-id': params.userId },
+  });
+  const body = await parseJson(res);
+  const mapped = mapExpenseError(body);
+  if (mapped) throw mapped;
+  if (!res.ok) throw new ExpenseApiError(`지출 삭제 실패 (${res.status})`, { status: res.status });
 }
 
 export function getExpenseErrorMessage(error: unknown): string {

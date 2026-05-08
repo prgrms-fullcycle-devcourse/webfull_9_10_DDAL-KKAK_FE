@@ -8,6 +8,7 @@ import { formatKRW, formatLocal } from '@/lib/money';
 import type { Journey } from '@/features/journeys/types';
 import type { Expense } from '@/features/expenses/types';
 import { useAllExpensesQuery } from '@/features/expenses/queries';
+import { useAuth } from '@/features/auth/useAuth';
 import { useJourneysQuery } from '@/features/journeys/queries';
 import { calcSettlement, ledgerSelfName, sumMySpendKRW } from '@/features/settlement/calc';
 
@@ -443,8 +444,9 @@ function JourneyCard({
 
 export function HomePage() {
   const nav = useNavigate();
+  const { user } = useAuth();
   const { data: journeys = [], isPending: journeysPending } = useJourneysQuery();
-  const { data: allExpenses = [] } = useAllExpensesQuery();
+  const { data: allExpenses = [] } = useAllExpensesQuery(user?.id);
 
   const { ongoing, upcoming, past } = useMemo(() => {
     const ongoing: Journey[] = [];

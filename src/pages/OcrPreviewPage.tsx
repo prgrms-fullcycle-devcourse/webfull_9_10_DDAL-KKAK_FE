@@ -57,6 +57,11 @@ export function OcrPreviewPage() {
   }
 
   const defaultSplitWith = journey.participants.length ? journey.participants : ['나'];
+  const resolveParticipantId = (name: string): string => {
+    const byName = journey.participantIdsByName;
+    if (!byName) return name;
+    return byName[name] ?? name;
+  };
   const receiptId = state?.receiptId;
   const cleanupReceiptJob = async () => {
     if (!receiptId || !user?.id) return;
@@ -90,7 +95,11 @@ export function OcrPreviewPage() {
         category: draft.category || '기타',
         paidAt,
         payer: draft.payer,
+        payerParticipantId: resolveParticipantId(draft.payer),
         emoji: draft.emoji || '🧾',
+        fxMode: journey.rateMode === 'fixed' ? 'FIXED' : 'REALTIME',
+        fxRateTripToKrw: journey.rate,
+        amountKrw: Math.round((Number(draft.amountLocal) || 0) * journey.rate),
 
         comment: draft.comment?.trim() || undefined,
 

@@ -3,6 +3,9 @@ import type { Expense } from '@/features/expenses/types';
 import {
   ExpenseApiError,
   createExpenseApi,
+  deleteExpenseApi,
+  getExpenseApi,
+  listExpensesApi,
   patchExpenseApi,
 } from '@/features/expenses/expensesApi';
 import {
@@ -12,28 +15,62 @@ import {
   loadAllExpenses,
   updateExpense,
 } from '@/features/expenses/storage';
+import { loadJourneys } from '@/features/journeys/storage';
 
 async function sleep(ms: number) {
   await new Promise((r) => setTimeout(r, ms));
 }
 
-export function useExpensesQuery(journeyId: string | undefined) {
+function shouldUseExpenseFallback(): boolean {
+  return import.meta.env.DEV || import.meta.env.VITE_USE_MOCK === 'true';
+}
+
+export function useExpensesQuery(journeyId: string | undefined, userId?: string) {
   return useQuery({
     queryKey: ['expenses', journeyId],
     enabled: !!journeyId,
     queryFn: async (): Promise<Expense[]> => {
       await sleep(80);
-      return loadAllExpenses().filter((e) => e.journeyId === journeyId);
+      if (!journeyId) return [];
+      if (!userId) return loadAllExpenses().filter((e) => e.journeyId === journeyId);
+      try {
+        return await listExpensesApi({ tripId: journeyId, userId });
+      } catch (error) {
+        if (
+          shouldUseExpenseFallback() &&
+          error instanceof ExpenseApiError &&
+          error.status === 404
+        ) {
+          return loadAllExpenses().filter((e) => e.journeyId === journeyId);
+        }
+        throw error;
+      }
     },
   });
 }
 
-export function useAllExpensesQuery() {
+export function useAllExpensesQuery(userId?: string) {
   return useQuery({
     queryKey: ['expenses'],
     queryFn: async (): Promise<Expense[]> => {
       await sleep(80);
-      return loadAllExpenses();
+      if (!userId) return loadAllExpenses();
+      try {
+        const tripIds = loadJourneys().map((j) => j.id);
+        const rows = await Promise.all(
+          tripIds.map((tripId) => listExpensesApi({ tripId, userId })),
+        );
+        return rows.flat();
+      } catch (error) {
+        if (
+          shouldUseExpenseFallback() &&
+          error instanceof ExpenseApiError &&
+          error.status === 404
+        ) {
+          return loadAllExpenses();
+        }
+        throw error;
+      }
     },
   });
 }
@@ -49,7 +86,11 @@ export function useAddExpenseMutation(userId?: string) {
       try {
         return await createExpenseApi({ expense, userId });
       } catch (error) {
-        if (error instanceof ExpenseApiError && error.status !== 404) throw error;
+        if (
+          !(shouldUseExpenseFallback() && error instanceof ExpenseApiError && error.status === 404)
+        ) {
+          throw error;
+        }
         // 백엔드 /expenses 미구현(404) 환경에서는 로컬 저장으로 폴백
         return addExpense(expense).find((e) => e.id === expense.id) ?? expense;
       }
@@ -62,12 +103,27 @@ export function useAddExpenseMutation(userId?: string) {
   });
 }
 
-export function useExpenseQuery(expenseId: string | undefined) {
+export function useExpenseQuery(expenseId: string | undefined, userId?: string) {
   return useQuery({
     queryKey: ['expense', expenseId],
     enabled: !!expenseId,
     queryFn: async (): Promise<Expense> => {
       await sleep(80);
+      if (expenseId && userId) {
+        try {
+          return await getExpenseApi({ expenseId, userId });
+        } catch (error) {
+          if (
+            !(
+              shouldUseExpenseFallback() &&
+              error instanceof ExpenseApiError &&
+              error.status === 404
+            )
+          ) {
+            throw error;
+          }
+        }
+      }
       const found = findExpenseById(expenseId!);
       if (!found) throw new Error('소비 내역을 찾을 수 없어요.');
       return found;
@@ -104,7 +160,15 @@ export function useUpdateExpenseMutation(userId?: string) {
         try {
           return await patchExpenseApi({ expenseId: id, patch, fallback, userId });
         } catch (error) {
-          if (error instanceof ExpenseApiError && error.status !== 404) throw error;
+          if (
+            !(
+              shouldUseExpenseFallback() &&
+              error instanceof ExpenseApiError &&
+              error.status === 404
+            )
+          ) {
+            throw error;
+          }
           // 백엔드 /expenses 미구현(404) 환경에서는 로컬 저장으로 폴백
         }
       }
@@ -123,11 +187,26 @@ export function useUpdateExpenseMutation(userId?: string) {
   });
 }
 
-export function useDeleteExpenseMutation() {
+export function useDeleteExpenseMutation(userId?: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async ({ id, journeyId }: { id: string; journeyId: string }) => {
       await sleep(100);
+      if (userId) {
+        try {
+          await deleteExpenseApi({ expenseId: id, userId });
+        } catch (error) {
+          if (
+            !(
+              shouldUseExpenseFallback() &&
+              error instanceof ExpenseApiError &&
+              error.status === 404
+            )
+          ) {
+            throw error;
+          }
+        }
+      }
       deleteExpense(id);
       return { id, journeyId };
     },
