@@ -52,9 +52,9 @@ export function JourneyCreatePage() {
   const [selectedPreset, setSelectedPreset] = useState<string | null>(null);
   const [destination, setDestination] = useState('');
   const [country, setCountry] = useState('한국');
-  const [currency, setCurrency] = useState<CurrencyCode>('JPY');
+  const [currency, setCurrency] = useState<CurrencyCode>('KRW');
   const [rateMode, setRateMode] = useState<RateMode>('fixed');
-  const [fixedRate, setFixedRate] = useState<number | ''>(9.0);
+  const [fixedRate, setFixedRate] = useState<number | ''>(1);
   const [participants, setParticipants] = useState<string[]>(['나']);
   const [newParticipant, setNewParticipant] = useState('');
   const [dates, setDates] = useState({ start: today, end: today });
@@ -344,75 +344,80 @@ export function JourneyCreatePage() {
           </div>
         </section>
 
-        <section className="space-y-4">
-          <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400">
-            환율 적용 방식
-          </label>
-          <div className="grid grid-cols-2 gap-4">
-            <button
-              type="button"
-              onClick={() => setRateMode('fixed')}
-              className={`rounded-[24px] border p-6 text-center transition-all ${rateMode === 'fixed' ? 'border-blue-600 bg-white shadow-lg shadow-blue-50' : 'border-slate-100 bg-slate-50'}`}
-            >
-              <div
-                className={`text-base font-black ${rateMode === 'fixed' ? 'text-blue-600' : 'text-slate-400'}`}
+        {currency !== 'KRW' && (
+          <section className="space-y-4">
+            <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400">
+              환율 적용 방식
+            </label>
+            <div className="grid grid-cols-2 gap-4">
+              <button
+                type="button"
+                onClick={() => setRateMode('fixed')}
+                className={`rounded-[24px] border p-6 text-center transition-all ${rateMode === 'fixed' ? 'border-blue-600 bg-white shadow-lg shadow-blue-50' : 'border-slate-100 bg-slate-50'}`}
               >
-                고정 환율
-              </div>
-              <div
-                className={`mt-1 text-[10px] font-bold ${rateMode === 'fixed' ? 'text-blue-300' : 'text-slate-300'}`}
+                <div
+                  className={`text-base font-black ${rateMode === 'fixed' ? 'text-blue-600' : 'text-slate-400'}`}
+                >
+                  고정 환율
+                </div>
+                <div
+                  className={`mt-1 text-[10px] font-bold ${rateMode === 'fixed' ? 'text-blue-300' : 'text-slate-300'}`}
+                >
+                  환전가 기준
+                </div>
+              </button>
+              <button
+                type="button"
+                onClick={() => setRateMode('realtime')}
+                className={`rounded-[24px] border p-6 text-center transition-all ${rateMode === 'realtime' ? 'border-blue-600 bg-white shadow-lg shadow-blue-50' : 'border-slate-100 bg-slate-50'}`}
               >
-                환전가 기준
-              </div>
-            </button>
-            <button
-              type="button"
-              onClick={() => setRateMode('realtime')}
-              className={`rounded-[24px] border p-6 text-center transition-all ${rateMode === 'realtime' ? 'border-blue-600 bg-white shadow-lg shadow-blue-50' : 'border-slate-100 bg-slate-50'}`}
-            >
-              <div
-                className={`text-base font-black ${rateMode === 'realtime' ? 'text-blue-600' : 'text-slate-400'}`}
-              >
-                실시간 환율
-              </div>
-              <div
-                className={`mt-1 text-[10px] font-bold ${rateMode === 'realtime' ? 'text-blue-300' : 'text-slate-300'}`}
-              >
-                매매기준율
-              </div>
-            </button>
-          </div>
-
-          {rateMode === 'realtime' && (
-            <p className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3 text-[11px] font-bold leading-relaxed text-slate-500">
-              팀에서 정책 확정 후 API로 연결할 예정이에요. 지금은 합계·원화 표시용으로 통화별
-              <span className="text-slate-700"> 데모 기준 환율</span>을 씁니다.
-            </p>
-          )}
-
-          {rateMode === 'fixed' && (
-            <div className="rounded-[28px] border border-blue-100 bg-blue-50/60 p-5">
-              <label className="mb-2 block text-[10px] font-black uppercase tracking-widest text-blue-600">
-                고정 환율 (현지 1단위 → KRW)
-              </label>
-              <div className="flex items-baseline gap-2">
-                <input
-                  type="number"
-                  inputMode="decimal"
-                  step="0.01"
-                  min={0}
-                  value={fixedRate}
-                  onChange={(e) =>
-                    setFixedRate(e.target.value === '' ? '' : Number(e.target.value))
-                  }
-                  placeholder="예: 9.32"
-                  className="w-full border-b-2 border-blue-200 bg-transparent text-3xl font-black text-blue-900 outline-none placeholder:text-blue-200"
-                />
-                <span className="font-black text-blue-600">KRW</span>
-              </div>
+                <div
+                  className={`text-base font-black ${rateMode === 'realtime' ? 'text-blue-600' : 'text-slate-400'}`}
+                >
+                  실시간 환율
+                </div>
+                <div
+                  className={`mt-1 text-[10px] font-bold ${rateMode === 'realtime' ? 'text-blue-300' : 'text-slate-300'}`}
+                >
+                  매매기준율
+                </div>
+              </button>
             </div>
-          )}
-        </section>
+
+            {rateMode === 'realtime' && (
+              <p className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3 text-[11px] font-bold leading-relaxed text-slate-500">
+                팀에서 정책 확정 후 API로 연결할 예정이에요. 지금은 합계·원화 표시용으로 통화별
+                <span className="text-slate-700"> 데모 기준 환율</span>을 씁니다.
+              </p>
+            )}
+
+            {rateMode === 'fixed' && (
+              <div className="rounded-[28px] border border-blue-100 bg-blue-50/60 p-5">
+                <label className="mb-2 block text-[10px] font-black uppercase tracking-widest text-blue-600">
+                  환전 환율 — 1 {currency} 당 원화
+                </label>
+                <div className="flex items-center gap-2">
+                  <span className="shrink-0 whitespace-nowrap text-sm font-black text-blue-300">
+                    1 {currency} =
+                  </span>
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    step="0.01"
+                    min={0}
+                    value={fixedRate}
+                    onChange={(e) =>
+                      setFixedRate(e.target.value === '' ? '' : Number(e.target.value))
+                    }
+                    placeholder="0"
+                    className="min-w-0 flex-1 border-b-2 border-blue-200 bg-transparent text-3xl font-black text-blue-900 outline-none placeholder:text-blue-200"
+                  />
+                  <span className="shrink-0 font-black text-blue-600">원</span>
+                </div>
+              </div>
+            )}
+          </section>
+        )}
 
         <section className="space-y-4">
           <label className="block text-center text-[10px] font-black uppercase tracking-widest text-slate-400">
