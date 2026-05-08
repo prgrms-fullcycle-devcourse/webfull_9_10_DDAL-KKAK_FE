@@ -1,14 +1,16 @@
 import { useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import { TopBar } from '@/components/layout/TopBar';
+import { useAuth } from '@/features/auth/useAuth';
 import { useExpensesQuery } from '@/features/expenses/queries';
 import { useJourneyQuery } from '@/features/journeys/queries';
 import { hourOf } from '@/lib/datetime';
 
 export function InsightPage() {
   const { journeyId } = useParams();
+  const { user } = useAuth();
   const { data: journey } = useJourneyQuery(journeyId);
-  const { data: expenses = [] } = useExpensesQuery(journeyId);
+  const { data: expenses = [] } = useExpensesQuery(journeyId, user?.id);
 
   const summary = useMemo(() => {
     if (!expenses.length) return null;

@@ -3,6 +3,7 @@ import type { CurrencyCode } from '@/types/common';
 export type Expense = {
   id: string;
   journeyId: string;
+  payerParticipantId?: string;
 
   emoji: string;
   storeName: string;
@@ -25,6 +26,9 @@ export type Expense = {
   comment?: string;
   receiptId?: string;
   receiptImageUrl?: string;
+  fxMode?: 'FIXED' | 'REALTIME';
+  fxRateTripToKrw?: number;
+  amountKrw?: number;
 
   createdAt: string;
   updatedAt: string;
