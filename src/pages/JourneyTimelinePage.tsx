@@ -3,6 +3,7 @@ import { useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Fab, FabStack } from '@/components/layout/Fab';
 import { TopBar } from '@/components/layout/TopBar';
+import { useAuth } from '@/features/auth/useAuth';
 import { useExpensesQuery } from '@/features/expenses/queries';
 import { useJourneyQuery } from '@/features/journeys/queries';
 import { expenseMyShareLocal, sumMySpendKRW, sumMySpendLocal } from '@/features/settlement/calc';
@@ -20,9 +21,10 @@ function dayNumberFromStart(startDateKey: string, dateKey: string): number {
 export function JourneyTimelinePage() {
   const nav = useNavigate();
   const { journeyId } = useParams();
+  const { user } = useAuth();
 
   const { data: journey } = useJourneyQuery(journeyId);
-  const { data: expenses = [] } = useExpensesQuery(journeyId);
+  const { data: expenses = [] } = useExpensesQuery(journeyId, user?.id);
 
   const grouped = useMemo(() => {
     const by: Record<string, typeof expenses> = {};

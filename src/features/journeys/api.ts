@@ -3,6 +3,35 @@ import type { Journey } from './types';
 import { ApiError } from '@/lib/api';
 import { addJourney, deleteJourney, loadJourneys, updateJourney } from './storage';
 
+type RawParticipant = string | { id?: string; name?: string };
+
+function normalizeJourney(raw: Journey): Journey {
+  const participantsRaw = (raw as unknown as { participants?: RawParticipant[] }).participants;
+  if (!Array.isArray(participantsRaw)) return raw;
+
+  const participants: string[] = [];
+  const participantIdsByName: Record<string, string> = {};
+
+  for (const p of participantsRaw) {
+    if (typeof p === 'string') {
+      participants.push(p);
+      continue;
+    }
+    const name = typeof p.name === 'string' ? p.name.trim() : '';
+    const id = typeof p.id === 'string' ? p.id.trim() : '';
+    if (!name) continue;
+    participants.push(name);
+    if (id) participantIdsByName[name] = id;
+  }
+
+  return {
+    ...raw,
+    participants: participants.length ? participants : raw.participants,
+    participantIdsByName:
+      Object.keys(participantIdsByName).length > 0 ? participantIdsByName : raw.participantIdsByName,
+  };
+}
+
 function useMockTrips(): boolean {
   // 개발 단계에선 "백엔드 인증 토큰이 없으면" trips API를 치지 않고
   // 로컬스토리지(mock)로 동작하게 해서 401로 화면이 막히지 않게 한다.
@@ -13,7 +42,8 @@ function useMockTrips(): boolean {
 export async function fetchTrips(): Promise<Journey[]> {
   if (useMockTrips()) return loadJourneys();
   try {
-    return await apiFetch<Journey[]>('/trips');
+    const list = await apiFetch<Journey[]>('/trips');
+    return list.map(normalizeJourney);
   } catch (e) {
     // 데모/개발 단계: trips API가 없거나(404/501) 인증이 없으면(401) 목데이터로 폴백
     if (e instanceof ApiError && (e.status === 401 || e.status === 404 || e.status === 501)) {
@@ -30,7 +60,8 @@ export async function fetchTrip(tripId: string): Promise<Journey> {
     return found;
   }
   try {
-    return await apiFetch<Journey>(`/trips/${tripId}`);
+    const trip = await apiFetch<Journey>(`/trips/${tripId}`);
+    return normalizeJourney(trip);
   } catch (e) {
     if (e instanceof ApiError && (e.status === 401 || e.status === 404 || e.status === 501)) {
       const found = loadJourneys().find((j) => j.id === tripId);
@@ -51,10 +82,11 @@ export async function createTrip(input: CreateTripInput): Promise<Journey> {
     return next;
   }
   try {
-    return await apiFetch<Journey>('/trips', {
+    const created = await apiFetch<Journey>('/trips', {
       method: 'POST',
       body: JSON.stringify(input),
     });
+    return normalizeJourney(created);
   } catch (e) {
     if (e instanceof ApiError && (e.status === 401 || e.status === 404 || e.status === 501)) {
       const id = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -74,10 +106,11 @@ export async function updateTrip(tripId: string, patch: Partial<Journey>): Promi
     return updated;
   }
   try {
-    return await apiFetch<Journey>(`/trips/${tripId}`, {
+    const updated = await apiFetch<Journey>(`/trips/${tripId}`, {
       method: 'PATCH',
       body: JSON.stringify(patch),
     });
+    return normalizeJourney(updated);
   } catch (e) {
     if (e instanceof ApiError && (e.status === 401 || e.status === 404 || e.status === 501)) {
       const list = updateJourney(tripId, patch);

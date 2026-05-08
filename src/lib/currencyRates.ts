@@ -12,6 +12,8 @@ export function demoRateForCurrency(currency: CurrencyCode): number {
       return 1500;
     case 'KRW':
       return 1;
+    case 'CNY':
+      return 190;
     default:
       return 1;
   }
