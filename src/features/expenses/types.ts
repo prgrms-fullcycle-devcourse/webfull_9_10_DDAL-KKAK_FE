@@ -23,6 +23,7 @@ export type Expense = {
 
   method: 'cash' | 'card';
   comment?: string;
+  receiptId?: string;
   receiptImageUrl?: string;
 
   createdAt: string;
