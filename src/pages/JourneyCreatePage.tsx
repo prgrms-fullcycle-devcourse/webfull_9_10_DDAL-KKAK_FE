@@ -55,7 +55,7 @@ export function JourneyCreatePage() {
   const [currency, setCurrency] = useState<CurrencyCode>('KRW');
   const [rateMode, setRateMode] = useState<RateMode>('fixed');
   const [fixedRate, setFixedRate] = useState<number | ''>(1);
-  const [participants, setParticipants] = useState<string[]>(['나']);
+  const [participants, setParticipants] = useState<string[]>([]);
   const [newParticipant, setNewParticipant] = useState('');
   const [dates, setDates] = useState({ start: today, end: today });
   const [budgetKRW, setBudgetKRW] = useState<number | ''>('');
@@ -99,13 +99,10 @@ export function JourneyCreatePage() {
   // 이미 등록된 영수증의 payer/splitWith 식별자가 깨지지 않는다.
   useEffect(() => {
     if (isEdit) return;
+    const trimmed = authName || '나';
     setParticipants((prev) => {
-      const trimmed = authName || '나';
-      const list = prev.length ? prev : ['나'];
-      if (list.includes(trimmed)) {
-        return [trimmed, ...list.filter((x) => x !== trimmed)];
-      }
-      return [trimmed, ...list];
+      const filtered = prev.filter((x) => x !== '나' && x !== trimmed);
+      return [trimmed, ...filtered];
     });
   }, [authName, isEdit]);
 
