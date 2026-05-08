@@ -12,7 +12,6 @@ import {
   loadAllExpenses,
   updateExpense,
 } from '@/features/expenses/storage';
-import { createExpense, type CreateExpenseInput } from '@/features/expenses/api';
 
 async function sleep(ms: number) {
   await new Promise((r) => setTimeout(r, ms));

@@ -12,7 +12,6 @@ import { ToastPortal } from '@/components/ui/Toast';
 import { useToast } from '@/components/ui/useToast';
 import { nowLocalIso, toStoredWallClock } from '@/lib/datetime';
 import { useAuth } from '@/features/auth/useAuth';
-import { getExpenseErrorMessage } from '@/features/expenses/expensesApi';
 
 type Mode = 'create' | 'edit' | 'ocr';
 
