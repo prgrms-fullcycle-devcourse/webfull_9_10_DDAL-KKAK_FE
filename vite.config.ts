@@ -18,6 +18,8 @@ export default defineConfig(({ mode }) => {
       proxy: {
         '/auth': { target: API_BASE, changeOrigin: true },
         '/api': { target: API_BASE, changeOrigin: true },
+        // 로컬 스크린샷 서버 (Playwright) 프록시
+        '/__screenshot': { target: 'http://localhost:8787', changeOrigin: true },
       },
     },
     plugins: [
