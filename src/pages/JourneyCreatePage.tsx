@@ -12,11 +12,26 @@ import {
 import { demoRateForCurrency, getRealtimeRate } from '@/lib/currencyRates';
 import { useAuth } from '@/features/auth/useAuth';
 
+const COUNTRY_PRESETS: {
+  label: string;
+  emoji: string;
+  country: string;
+  currency: CurrencyCode;
+  fixedRate: number;
+}[] = [
+  { label: '한국', emoji: '🇰🇷', country: '한국', currency: 'KRW', fixedRate: 1 },
+  { label: '일본', emoji: '🇯🇵', country: '일본', currency: 'JPY', fixedRate: 9.0 },
+  { label: '미국', emoji: '🇺🇸', country: '미국', currency: 'USD', fixedRate: 1350 },
+  { label: '유럽', emoji: '🇪🇺', country: '유럽', currency: 'EUR', fixedRate: 1500 },
+  { label: '중국', emoji: '🇨🇳', country: '중국', currency: 'CNY', fixedRate: 190 },
+];
+
 const CURRENCIES: { code: CurrencyCode; label: string }[] = [
   { code: 'JPY', label: 'JPY (엔)' },
   { code: 'USD', label: 'USD (달러)' },
   { code: 'EUR', label: 'EUR (유로)' },
   { code: 'KRW', label: 'KRW (원)' },
+  { code: 'CNY', label: 'CNY (위안)' },
 ];
 
 export function JourneyCreatePage() {
@@ -34,6 +49,7 @@ export function JourneyCreatePage() {
   const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
 
   const [name, setName] = useState('');
+  const [selectedPreset, setSelectedPreset] = useState<string | null>(null);
   const [destination, setDestination] = useState('');
   const [country, setCountry] = useState('한국');
   const [currency, setCurrency] = useState<CurrencyCode>('JPY');
@@ -58,7 +74,9 @@ export function JourneyCreatePage() {
 
     setName(existingJourney.name);
     setCountry(existingJourney.country);
-    setDestination('');
+    const matchingPreset = COUNTRY_PRESETS.find((p) => p.country === existingJourney.country);
+    setSelectedPreset(matchingPreset ? matchingPreset.label : '그 외');
+    setDestination(matchingPreset ? '' : existingJourney.country);
     setCurrency(existingJourney.currency);
     setRateMode(existingJourney.rateMode);
     setFixedRate(
@@ -107,7 +125,8 @@ export function JourneyCreatePage() {
 
   useEffect(() => {
     if (isEdit) return;
-    const seed = destination.trim() || name.trim();
+    if (selectedPreset !== '그 외') return;
+    const seed = destination.trim();
     if (!seed) return;
     const r = infer(seed);
     if (!r) return;
@@ -115,7 +134,7 @@ export function JourneyCreatePage() {
     setCurrency(r.currency);
     if (rateMode === 'fixed') setFixedRate(r.fixedRate);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [name, destination, isEdit]);
+  }, [destination, selectedPreset, isEdit]);
 
   const effectiveRate = (): number =>
     rateMode === 'fixed'
@@ -129,8 +148,7 @@ export function JourneyCreatePage() {
 
   const handleSubmit = async () => {
     const safeName = name.trim() || destination.trim() || country || '새 여행';
-    const rate =
-      rateMode === 'realtime' ? await getRealtimeRate(currency, 'KRW') : effectiveRate();
+    const rate = rateMode === 'realtime' ? await getRealtimeRate(currency, 'KRW') : effectiveRate();
     const plist = participants.length ? participants : [authName || '나'];
     // 수정 모드: 기존 selfParticipant 유지 (영수증 payer/splitWith와의 일관성).
     // 신규: 로그인 사용자명을 self로.
@@ -214,20 +232,52 @@ export function JourneyCreatePage() {
           </div>
 
           <div className="col-span-2">
-            <div className="mb-2 flex items-center justify-between">
-              <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400">
-                여행지(나라/도시)
-              </label>
-              <span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-black text-slate-500">
-                자동 인식: {country}
-              </span>
+            <label className="mb-2 block text-[10px] font-black uppercase tracking-widest text-slate-400">
+              여행지
+            </label>
+            <div className="grid grid-cols-3 gap-2">
+              {COUNTRY_PRESETS.map((preset) => (
+                <button
+                  key={preset.label}
+                  type="button"
+                  onClick={() => {
+                    setSelectedPreset(preset.label);
+                    setCountry(preset.country);
+                    setCurrency(preset.currency);
+                    if (rateMode === 'fixed') setFixedRate(preset.fixedRate);
+                    setDestination('');
+                  }}
+                  className={`flex flex-col items-center gap-1 rounded-2xl border-2 py-3 transition-all ${
+                    selectedPreset === preset.label
+                      ? 'border-blue-500 bg-blue-50 text-blue-700'
+                      : 'border-slate-100 bg-slate-50 text-slate-500'
+                  }`}
+                >
+                  <span className="text-xl">{preset.emoji}</span>
+                  <span className="text-xs font-black">{preset.label}</span>
+                </button>
+              ))}
+              <button
+                type="button"
+                onClick={() => setSelectedPreset('그 외')}
+                className={`col-span-1 flex flex-col items-center gap-1 rounded-2xl border-2 py-3 transition-all ${
+                  selectedPreset === '그 외'
+                    ? 'border-blue-500 bg-blue-50 text-blue-700'
+                    : 'border-slate-100 bg-slate-50 text-slate-500'
+                }`}
+              >
+                <span className="text-xl">✏️</span>
+                <span className="text-xs font-black">그 외</span>
+              </button>
             </div>
-            <input
-              value={destination}
-              onChange={(e) => setDestination(e.target.value)}
-              placeholder="예: 일본 후쿠오카"
-              className="w-full rounded-2xl border border-slate-100 bg-slate-50 p-4 text-sm font-bold outline-none focus:border-blue-500"
-            />
+            {selectedPreset === '그 외' && (
+              <input
+                value={destination}
+                onChange={(e) => setDestination(e.target.value)}
+                placeholder="예: 중국, 태국"
+                className="mt-2 w-full rounded-2xl border border-slate-100 bg-slate-50 p-4 text-sm font-bold outline-none focus:border-blue-500"
+              />
+            )}
           </div>
 
           <div>
