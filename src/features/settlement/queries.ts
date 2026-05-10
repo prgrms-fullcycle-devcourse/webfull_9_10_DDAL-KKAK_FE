@@ -1,8 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
 import { loadAllExpenses } from '@/features/expenses/storage';
 import { loadJourneys } from '@/features/journeys/storage';
-import { fetchSettlement, type SettlementData } from './api';
-import { calcSettlement } from './calc';
+import { fetchSettlement, fetchSettlementSummary, type SettlementData, type SettlementSummaryData } from './api';
+import { calcSettlement, ledgerSelfName, sumMySpendLocal, sumMySpendKRW } from './calc';
 
 /**
  * 토큰 있으면 백엔드 정산 API, 없으면 localStorage 기반 로컬 계산.
@@ -74,6 +74,44 @@ export function useSettlementQuery(tripId: string | undefined) {
       if (hasBackendAuth()) return fetchSettlement(tripId!);
       await new Promise((r) => setTimeout(r, 100));
       return buildLocalSettlement(tripId!);
+    },
+  });
+}
+
+/**
+ * 메인 화면용 "나의 정산 요약" — 토큰 있으면 백엔드, 없으면 로컬 계산.
+ */
+function buildLocalSettlementSummary(tripId: string): SettlementSummaryData {
+  const journey = loadJourneys().find((j) => j.id === tripId);
+  if (!journey) throw new Error('여정을 찾을 수 없어요.');
+  const expenses = loadAllExpenses().filter((e) => e.journeyId === tripId);
+
+  const me = ledgerSelfName(journey);
+  const mySpentLocal = sumMySpendLocal(journey, expenses);
+  const mySpentKrw = Math.round(sumMySpendKRW(journey, expenses));
+  const netLocal = calcSettlement(journey, expenses).nets.find((n) => n.person === me)?.netLocal ?? 0;
+  const netAmountKrw = Math.round(netLocal * journey.rate);
+
+  return {
+    tripId,
+    tripTitle: journey.name,
+    summary: {
+      totalSpentOriginal: mySpentLocal,
+      currencyCode: journey.currency,
+      totalSpentKrw: mySpentKrw,
+      netAmountKrw,
+    },
+  };
+}
+
+export function useSettlementSummaryQuery(tripId: string | undefined) {
+  return useQuery({
+    queryKey: ['settlementSummary', tripId],
+    enabled: !!tripId,
+    queryFn: async (): Promise<SettlementSummaryData> => {
+      if (hasBackendAuth()) return fetchSettlementSummary(tripId!);
+      await new Promise((r) => setTimeout(r, 80));
+      return buildLocalSettlementSummary(tripId!);
     },
   });
 }

@@ -9,7 +9,8 @@ import type { Journey } from '@/features/journeys/types';
 import type { Expense } from '@/features/expenses/types';
 import { useAllExpensesQuery } from '@/features/expenses/queries';
 import { useJourneysQuery } from '@/features/journeys/queries';
-import { calcSettlement, ledgerSelfName, sumMySpendKRW } from '@/features/settlement/calc';
+import { sumMySpendKRW } from '@/features/settlement/calc';
+import { useSettlementSummaryQuery } from '@/features/settlement/queries';
 
 /**
  * 데이터 로딩 중 스켈레톤.
@@ -157,22 +158,8 @@ function CompactJourneyRow({
 
   const hasBudget = typeof j.budgetKRW === 'number' && j.budgetKRW > 0;
 
-  // 정산 요약: 미정산 transfer 기준으로 동적 계산
-  // 결산표에서 송금 완료 체크할 때마다 실시간 반영
-  const myName = ledgerSelfName(j);
-  const { transfers } = calcSettlement(j, tripExpenses);
-  const settledKeys = new Set(j.settledTransferKeys ?? []);
-  const isSettled = (t: { from: string; to: string; amountLocal: number }) =>
-    settledKeys.has(`${t.from}->${t.to}-${t.amountLocal}`);
-
-  const unsettledToMe = transfers
-    .filter((t) => t.to === myName && !isSettled(t))
-    .reduce((acc, t) => acc + t.amountLocal, 0);
-  const unsettledFromMe = transfers
-    .filter((t) => t.from === myName && !isSettled(t))
-    .reduce((acc, t) => acc + t.amountLocal, 0);
-  const remainingNetLocal = unsettledToMe - unsettledFromMe;
-  const myNetKRW = Math.round(remainingNetLocal * j.rate);
+  const { data: settleSummary } = useSettlementSummaryQuery(j.id);
+  const myNetKRW = settleSummary?.summary?.netAmountKrw ?? 0;
 
   const settleTone: 'credit' | 'debit' | 'none' =
     myNetKRW > 0 ? 'credit' : myNetKRW < 0 ? 'debit' : 'none';
@@ -276,21 +263,8 @@ function JourneyCard({
   const usedRatio = hasBudget ? Math.min(Math.round((spentKRW / budgetKRW) * 100), 999) : 0;
   const progressPct = hasBudget ? Math.min(usedRatio, 100) : 0;
 
-  // 정산 요약: 미정산 transfer 기준으로 동적 계산 (결산표 체크와 실시간 연동)
-  // 모두 완료되면 자연스럽게 net = 0 → 정산 완료
-  const myName = ledgerSelfName(j);
-  const { transfers } = calcSettlement(j, tripExpenses);
-  const settledKeys = new Set(j.settledTransferKeys ?? []);
-  const isSettled = (t: { from: string; to: string; amountLocal: number }) =>
-    settledKeys.has(`${t.from}->${t.to}-${t.amountLocal}`);
-  const unsettledToMe = transfers
-    .filter((t) => t.to === myName && !isSettled(t))
-    .reduce((acc, t) => acc + t.amountLocal, 0);
-  const unsettledFromMe = transfers
-    .filter((t) => t.from === myName && !isSettled(t))
-    .reduce((acc, t) => acc + t.amountLocal, 0);
-  const remainingNetLocal = unsettledToMe - unsettledFromMe;
-  const myNetKRW = Math.round(remainingNetLocal * j.rate);
+  const { data: settleSummary } = useSettlementSummaryQuery(j.id);
+  const myNetKRW = settleSummary?.summary?.netAmountKrw ?? 0;
   const settleTone: 'credit' | 'debit' | 'none' =
     myNetKRW > 0 ? 'credit' : myNetKRW < 0 ? 'debit' : 'none';
   const settleLabel =
