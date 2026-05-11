@@ -17,12 +17,10 @@ import {
 } from '@/features/expenses/storage';
 import { loadJourneys } from '@/features/journeys/storage';
 
-async function sleep(ms: number) {
-  await new Promise((r) => setTimeout(r, ms));
-}
-
 function shouldUseExpenseFallback(): boolean {
-  return import.meta.env.DEV || import.meta.env.VITE_USE_MOCK === 'true';
+  // 명시적 mock 설정 시에만 로컬스토리지로 폴백.
+  // userId 없으면 각 mutation에서 직접 처리.
+  return import.meta.env.VITE_USE_MOCK === 'true';
 }
 
 export function useExpensesQuery(journeyId: string | undefined, userId?: string) {
@@ -30,7 +28,6 @@ export function useExpensesQuery(journeyId: string | undefined, userId?: string)
     queryKey: ['expenses', journeyId],
     enabled: !!journeyId,
     queryFn: async (): Promise<Expense[]> => {
-      await sleep(80);
       if (!journeyId) return [];
       if (!userId) return loadAllExpenses().filter((e) => e.journeyId === journeyId);
       try {
@@ -53,7 +50,6 @@ export function useAllExpensesQuery(userId?: string) {
   return useQuery({
     queryKey: ['expenses'],
     queryFn: async (): Promise<Expense[]> => {
-      await sleep(80);
       if (!userId) return loadAllExpenses();
       try {
         const tripIds = loadJourneys().map((j) => j.id);
@@ -79,7 +75,6 @@ export function useAddExpenseMutation(userId?: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (expense: Expense) => {
-      await sleep(100);
       if (!userId) {
         return addExpense(expense).find((e) => e.id === expense.id) ?? expense;
       }
@@ -108,7 +103,6 @@ export function useExpenseQuery(expenseId: string | undefined, userId?: string) 
     queryKey: ['expense', expenseId],
     enabled: !!expenseId,
     queryFn: async (): Promise<Expense> => {
-      await sleep(80);
       if (expenseId && userId) {
         try {
           return await getExpenseApi({ expenseId, userId });
@@ -141,7 +135,6 @@ export function useUpdateExpenseMutation(userId?: string) {
       id: string;
       patch: Omit<Partial<Expense>, 'receiptId'> & { journeyId: string; receiptId?: string | null };
     }) => {
-      await sleep(100);
       const current = findExpenseById(id);
       if (!current) throw new Error('소비 내역을 찾을 수 없어요.');
       const fallback: Expense = {
@@ -191,7 +184,6 @@ export function useDeleteExpenseMutation(userId?: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async ({ id, journeyId }: { id: string; journeyId: string }) => {
-      await sleep(100);
       if (userId) {
         try {
           await deleteExpenseApi({ expenseId: id, userId });
