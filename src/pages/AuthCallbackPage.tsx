@@ -16,8 +16,8 @@ import { apiFetch } from '@/lib/api';
  * 미확인 (백엔드 답변 대기 중):
  *   백엔드가 프론트로 어떻게 사용자를 돌려보내는지 (URL 파라미터? 쿠키만?)
  *   현재는 아래 두 가지 패턴 모두 수용하도록 작성:
- *     A. URL 쿼리에 accessToken 박혀 있으면 그걸 사용 + /auth/me 호출
- *     B. URL이 비어있으면 cookie 기반으로 /auth/me 직접 호출
+ *     A. URL 쿼리에 accessToken 박혀 있으면 그걸 사용 + /users/me 호출
+ *     B. URL이 비어있으면 cookie 기반으로 /users/me 직접 호출
  *
  * 실제 백엔드 동작에 맞춰 fetchSession 함수만 단순화하면 됨.
  */
@@ -67,8 +67,8 @@ export function AuthCallbackPage() {
         if (userId && userName) {
           login({ id: userId, name: userName, imageUrl: userImage ?? undefined });
         } else {
-          // 4. URL에 user 정보가 없으면 /auth/me 호출 (Bearer 토큰 또는 쿠키 사용)
-          const me = await apiFetch<{ id: string; name: string; imageUrl?: string }>('/auth/me');
+          // 4. URL에 user 정보가 없으면 /users/me 호출 (Bearer 토큰 또는 쿠키 사용)
+          const me = await apiFetch<{ id: string; name: string; imageUrl?: string }>('/users/me');
           login({ id: me.id, name: me.name, imageUrl: me.imageUrl });
         }
 
