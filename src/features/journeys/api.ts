@@ -31,7 +31,6 @@ function normalizeJourney(raw: Journey): Journey {
   const rawStatus = typeof r.status === 'string' ? r.status : '';
   const resolvedStatus: Journey['status'] =
     STATUS_FROM_API[rawStatus] ?? (raw.status as Journey['status']) ?? 'active';
-
   const participantsRaw = r.participants as RawParticipant[] | undefined;
   const participants: string[] = [];
   const participantIdsByName: Record<string, string> = {};
@@ -73,7 +72,6 @@ function serializeTrip(input: Partial<Journey> & { name?: string }): Record<stri
   if (input.budgetKRW !== undefined) payload.budgetKrw = input.budgetKRW;
   if (input.status !== undefined) payload.status = STATUS_TO_API[input.status] ?? input.status;
 
-  // participants: string[] → [{name: string}]
   if (input.participants !== undefined) {
     payload.participants = input.participants.map((name) => ({ name }));
   }
