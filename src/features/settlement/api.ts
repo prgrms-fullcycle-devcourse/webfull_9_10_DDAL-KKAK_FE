@@ -28,6 +28,20 @@ export type SettlementData = {
   settlementSummary: SettlementParticipant[];
 };
 
+export type SettlementSummaryData = {
+  tripId: string;
+  tripTitle: string;
+  summary: {
+    /** 내가 소비한 외화 총액(현지 통화) */
+    totalSpentOriginal: number;
+    currencyCode: string;
+    /** 내가 소비한 금액의 한화 환산 총액 */
+    totalSpentKrw: number;
+    /** 최종 정산 예정액 (+ 받을 돈, - 줄 돈) */
+    netAmountKrw: number;
+  };
+};
+
 /**
  * 최종 정산 결과 조회.
  * 경로: GET /trips/{tripId}/settlement
@@ -37,4 +51,12 @@ export type SettlementData = {
  */
 export async function fetchSettlement(tripId: string): Promise<SettlementData> {
   return apiFetch<SettlementData>(`/trips/${tripId}/settlement`);
+}
+
+/**
+ * 나의 정산 요약 조회 (메인 카드/대시보드용)
+ * 경로: GET /trips/{tripId}/settlement/summary
+ */
+export async function fetchSettlementSummary(tripId: string): Promise<SettlementSummaryData> {
+  return apiFetch<SettlementSummaryData>(`/trips/${tripId}/settlement/summary`);
 }
