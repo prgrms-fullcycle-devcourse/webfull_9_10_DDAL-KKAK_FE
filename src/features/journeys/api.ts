@@ -5,50 +5,80 @@ import { addJourney, deleteJourney, loadJourneys, updateJourney } from './storag
 
 type RawParticipant = string | { id?: string; name?: string };
 
+const STATUS_FROM_API: Record<string, Journey['status']> = {
+  PLANNING: 'planned',
+  ONGOING: 'active',
+  COMPLETED: 'ended',
+};
+const STATUS_TO_API: Record<Journey['status'], string> = {
+  planned: 'PLANNING',
+  active: 'ONGOING',
+  ended: 'COMPLETED',
+};
+
 function normalizeJourney(raw: Journey): Journey {
-  const rawAny = raw as unknown as Record<string, unknown>;
+  const r = raw as unknown as Record<string, unknown>;
+
   const resolvedName =
-    (typeof rawAny.name === 'string' && rawAny.name) ||
-    (typeof rawAny.title === 'string' && rawAny.title) ||
-    '';
+    (typeof r.name === 'string' && r.name) || (typeof r.title === 'string' && r.title) || '';
 
-  const participantsRaw = rawAny.participants as RawParticipant[] | undefined;
-  if (!Array.isArray(participantsRaw)) {
-    return { ...raw, name: resolvedName || raw.name };
-  }
+  const resolvedCurrency =
+    (typeof r.currencyCode === 'string' && r.currencyCode) ||
+    (typeof r.currency === 'string' && r.currency) ||
+    raw.currency ||
+    'KRW';
 
+  const rawStatus = typeof r.status === 'string' ? r.status : '';
+  const resolvedStatus: Journey['status'] =
+    STATUS_FROM_API[rawStatus] ?? (raw.status as Journey['status']) ?? 'active';
+
+  const participantsRaw = r.participants as RawParticipant[] | undefined;
   const participants: string[] = [];
   const participantIdsByName: Record<string, string> = {};
 
-  for (const p of participantsRaw) {
-    if (typeof p === 'string') {
-      participants.push(p);
-      continue;
+  if (Array.isArray(participantsRaw)) {
+    for (const p of participantsRaw) {
+      if (typeof p === 'string') {
+        participants.push(p);
+        continue;
+      }
+      const name = typeof p.name === 'string' ? p.name.trim() : '';
+      const id = typeof p.id === 'string' ? p.id.trim() : '';
+      if (!name) continue;
+      participants.push(name);
+      if (id) participantIdsByName[name] = id;
     }
-    const name = typeof p.name === 'string' ? p.name.trim() : '';
-    const id = typeof p.id === 'string' ? p.id.trim() : '';
-    if (!name) continue;
-    participants.push(name);
-    if (id) participantIdsByName[name] = id;
   }
 
   return {
     ...raw,
     name: resolvedName || raw.name,
-    participants: participants.length ? participants : raw.participants,
-    participantIdsByName:
-      Object.keys(participantIdsByName).length > 0
-        ? participantIdsByName
-        : raw.participantIdsByName,
+    currency: resolvedCurrency as Journey['currency'],
+    status: resolvedStatus,
+    ...(participants.length && { participants }),
+    ...(Object.keys(participantIdsByName).length && { participantIdsByName }),
   };
 }
 
 function serializeTrip(input: Partial<Journey> & { name?: string }): Record<string, unknown> {
-  const { name, ...rest } = input;
-  return {
-    title: name, // 백엔드가 'title' 필드를 기대함
-    ...rest,
-  };
+  const payload: Record<string, unknown> = {};
+
+  if (input.name !== undefined) payload.title = input.name;
+  if (input.country !== undefined) payload.country = input.country;
+  if (input.currency !== undefined) payload.currencyCode = input.currency;
+  if (input.rate !== undefined) payload.exchangeRate = input.rate;
+  if (input.rateMode !== undefined) payload.rateMode = input.rateMode;
+  if (input.startDate !== undefined) payload.startDate = input.startDate;
+  if (input.endDate !== undefined) payload.endDate = input.endDate;
+  if (input.budgetKRW !== undefined) payload.budgetKrw = input.budgetKRW;
+  if (input.status !== undefined) payload.status = STATUS_TO_API[input.status] ?? input.status;
+
+  // participants: string[] → [{name: string}]
+  if (input.participants !== undefined) {
+    payload.participants = input.participants.map((name) => ({ name }));
+  }
+
+  return payload;
 }
 
 function isMockMode(): boolean {
@@ -62,7 +92,6 @@ export async function fetchTrips(): Promise<Journey[]> {
     const list = await apiFetch<Journey[]>('/trips');
     return list.map(normalizeJourney);
   } catch (e) {
-    // 데모/개발 단계: trips API가 없거나(404/501) 인증이 없으면(401) 목데이터로 폴백
     if (e instanceof ApiError && (e.status === 401 || e.status === 404 || e.status === 501)) {
       return loadJourneys();
     }
