@@ -51,13 +51,13 @@ function serializeTrip(input: Partial<Journey> & { name?: string }): Record<stri
   };
 }
 
-function useMockTrips(): boolean {
+function isMockMode(): boolean {
   const hasToken = !!localStorage.getItem('tt_access_token_v1');
   return import.meta.env.VITE_USE_MOCK === 'true' || !hasToken;
 }
 
 export async function fetchTrips(): Promise<Journey[]> {
-  if (useMockTrips()) return loadJourneys();
+  if (isMockMode()) return loadJourneys();
   try {
     const list = await apiFetch<Journey[]>('/trips');
     return list.map(normalizeJourney);
@@ -71,7 +71,7 @@ export async function fetchTrips(): Promise<Journey[]> {
 }
 
 export async function fetchTrip(tripId: string): Promise<Journey> {
-  if (useMockTrips()) {
+  if (isMockMode()) {
     const found = loadJourneys().find((j) => j.id === tripId);
     if (!found) throw new Error('여정을 찾을 수 없어요.');
     return found;
@@ -92,7 +92,7 @@ export async function fetchTrip(tripId: string): Promise<Journey> {
 export type CreateTripInput = Omit<Journey, 'id'>;
 
 export async function createTrip(input: CreateTripInput): Promise<Journey> {
-  if (useMockTrips()) {
+  if (isMockMode()) {
     const id = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
     const next: Journey = { ...input, id };
     addJourney(next);
@@ -116,7 +116,7 @@ export async function createTrip(input: CreateTripInput): Promise<Journey> {
 }
 
 export async function updateTrip(tripId: string, patch: Partial<Journey>): Promise<Journey> {
-  if (useMockTrips()) {
+  if (isMockMode()) {
     const list = updateJourney(tripId, patch);
     const updated = list.find((j) => j.id === tripId);
     if (!updated) throw new Error('여정을 찾을 수 없어요.');
@@ -140,7 +140,7 @@ export async function updateTrip(tripId: string, patch: Partial<Journey>): Promi
 }
 
 export async function deleteTrip(tripId: string): Promise<void> {
-  if (useMockTrips()) {
+  if (isMockMode()) {
     deleteJourney(tripId);
     return;
   }
