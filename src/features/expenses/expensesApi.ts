@@ -31,6 +31,15 @@ function expensesUrl(path: string): string {
   return new URL(p, apiBase()).toString();
 }
 
+/** localStorage에서 Bearer 토큰 조회 */
+function getAuthHeaders(userId: string): Record<string, string> {
+  const token = localStorage.getItem('tt_access_token_v1');
+  return {
+    'x-user-id': userId,
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
+}
+
 async function parseJson(res: Response): Promise<unknown> {
   const text = await res.text();
   if (!text) return null;
@@ -141,7 +150,8 @@ function fromApiExpense(raw: unknown, fallback: Expense): Expense {
 export async function listExpensesApi(params: { tripId: string; userId: string }): Promise<Expense[]> {
   const res = await fetch(expensesUrl(`expenses?tripId=${encodeURIComponent(params.tripId)}`), {
     method: 'GET',
-    headers: { 'x-user-id': params.userId },
+    credentials: 'include',
+    headers: getAuthHeaders(params.userId),
   });
   const body = await parseJson(res);
   const mapped = mapExpenseError(body);
@@ -172,7 +182,8 @@ export async function listExpensesApi(params: { tripId: string; userId: string }
 export async function getExpenseApi(params: { expenseId: string; userId: string }): Promise<Expense> {
   const res = await fetch(expensesUrl(`expenses/${encodeURIComponent(params.expenseId)}`), {
     method: 'GET',
-    headers: { 'x-user-id': params.userId },
+    credentials: 'include',
+    headers: getAuthHeaders(params.userId),
   });
   const body = await parseJson(res);
   const mapped = mapExpenseError(body);
@@ -201,7 +212,8 @@ export async function getExpenseApi(params: { expenseId: string; userId: string 
 export async function deleteExpenseApi(params: { expenseId: string; userId: string }): Promise<void> {
   const res = await fetch(expensesUrl(`expenses/${encodeURIComponent(params.expenseId)}`), {
     method: 'DELETE',
-    headers: { 'x-user-id': params.userId },
+    credentials: 'include',
+    headers: getAuthHeaders(params.userId),
   });
   const body = await parseJson(res);
   const mapped = mapExpenseError(body);
@@ -240,9 +252,10 @@ export async function createExpenseApi(params: {
 }): Promise<Expense> {
   const res = await fetch(expensesUrl('expenses'), {
     method: 'POST',
+    credentials: 'include',
     headers: {
       'content-type': 'application/json',
-      'x-user-id': params.userId,
+      ...getAuthHeaders(params.userId),
     },
     body: JSON.stringify(toExpensePayload(params.expense)),
   });
@@ -263,9 +276,10 @@ export async function patchExpenseApi(params: {
 }): Promise<Expense> {
   const res = await fetch(expensesUrl(`expenses/${encodeURIComponent(params.expenseId)}`), {
     method: 'PATCH',
+    credentials: 'include',
     headers: {
       'content-type': 'application/json',
-      'x-user-id': params.userId,
+      ...getAuthHeaders(params.userId),
     },
     body: JSON.stringify(toExpensePayload(params.patch)),
   });

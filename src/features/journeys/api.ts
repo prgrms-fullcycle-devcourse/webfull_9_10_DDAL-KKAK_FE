@@ -6,8 +6,16 @@ import { addJourney, deleteJourney, loadJourneys, updateJourney } from './storag
 type RawParticipant = string | { id?: string; name?: string };
 
 function normalizeJourney(raw: Journey): Journey {
-  const participantsRaw = (raw as unknown as { participants?: RawParticipant[] }).participants;
-  if (!Array.isArray(participantsRaw)) return raw;
+  const rawAny = raw as unknown as Record<string, unknown>;
+  const resolvedName =
+    (typeof rawAny.name === 'string' && rawAny.name) ||
+    (typeof rawAny.title === 'string' && rawAny.title) ||
+    '';
+
+  const participantsRaw = rawAny.participants as RawParticipant[] | undefined;
+  if (!Array.isArray(participantsRaw)) {
+    return { ...raw, name: resolvedName || raw.name };
+  }
 
   const participants: string[] = [];
   const participantIdsByName: Record<string, string> = {};
@@ -26,21 +34,30 @@ function normalizeJourney(raw: Journey): Journey {
 
   return {
     ...raw,
+    name: resolvedName || raw.name,
     participants: participants.length ? participants : raw.participants,
     participantIdsByName:
-      Object.keys(participantIdsByName).length > 0 ? participantIdsByName : raw.participantIdsByName,
+      Object.keys(participantIdsByName).length > 0
+        ? participantIdsByName
+        : raw.participantIdsByName,
   };
 }
 
-function useMockTrips(): boolean {
-  // 개발 단계에선 "백엔드 인증 토큰이 없으면" trips API를 치지 않고
-  // 로컬스토리지(mock)로 동작하게 해서 401로 화면이 막히지 않게 한다.
+function serializeTrip(input: Partial<Journey> & { name?: string }): Record<string, unknown> {
+  const { name, ...rest } = input;
+  return {
+    title: name, // 백엔드가 'title' 필드를 기대함
+    ...rest,
+  };
+}
+
+function isMockMode(): boolean {
   const hasToken = !!localStorage.getItem('tt_access_token_v1');
-  return import.meta.env.DEV || import.meta.env.VITE_USE_MOCK === 'true' || !hasToken;
+  return import.meta.env.VITE_USE_MOCK === 'true' || !hasToken;
 }
 
 export async function fetchTrips(): Promise<Journey[]> {
-  if (useMockTrips()) return loadJourneys();
+  if (isMockMode()) return loadJourneys();
   try {
     const list = await apiFetch<Journey[]>('/trips');
     return list.map(normalizeJourney);
@@ -54,7 +71,7 @@ export async function fetchTrips(): Promise<Journey[]> {
 }
 
 export async function fetchTrip(tripId: string): Promise<Journey> {
-  if (useMockTrips()) {
+  if (isMockMode()) {
     const found = loadJourneys().find((j) => j.id === tripId);
     if (!found) throw new Error('여정을 찾을 수 없어요.');
     return found;
@@ -75,7 +92,7 @@ export async function fetchTrip(tripId: string): Promise<Journey> {
 export type CreateTripInput = Omit<Journey, 'id'>;
 
 export async function createTrip(input: CreateTripInput): Promise<Journey> {
-  if (useMockTrips()) {
+  if (isMockMode()) {
     const id = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
     const next: Journey = { ...input, id };
     addJourney(next);
@@ -84,7 +101,7 @@ export async function createTrip(input: CreateTripInput): Promise<Journey> {
   try {
     const created = await apiFetch<Journey>('/trips', {
       method: 'POST',
-      body: JSON.stringify(input),
+      body: JSON.stringify(serializeTrip(input)),
     });
     return normalizeJourney(created);
   } catch (e) {
@@ -99,7 +116,7 @@ export async function createTrip(input: CreateTripInput): Promise<Journey> {
 }
 
 export async function updateTrip(tripId: string, patch: Partial<Journey>): Promise<Journey> {
-  if (useMockTrips()) {
+  if (isMockMode()) {
     const list = updateJourney(tripId, patch);
     const updated = list.find((j) => j.id === tripId);
     if (!updated) throw new Error('여정을 찾을 수 없어요.');
@@ -108,7 +125,7 @@ export async function updateTrip(tripId: string, patch: Partial<Journey>): Promi
   try {
     const updated = await apiFetch<Journey>(`/trips/${tripId}`, {
       method: 'PATCH',
-      body: JSON.stringify(patch),
+      body: JSON.stringify(serializeTrip(patch)),
     });
     return normalizeJourney(updated);
   } catch (e) {
@@ -123,7 +140,7 @@ export async function updateTrip(tripId: string, patch: Partial<Journey>): Promi
 }
 
 export async function deleteTrip(tripId: string): Promise<void> {
-  if (useMockTrips()) {
+  if (isMockMode()) {
     deleteJourney(tripId);
     return;
   }

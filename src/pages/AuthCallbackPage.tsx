@@ -27,7 +27,8 @@ const ERROR_MESSAGES: Record<string, string> = {
   INVALID_OAUTH_CODE: '인증 코드가 만료됐거나 변조됐어요. 다시 시도해주세요.',
   CSRF_ERROR: '보안 검증에 실패했어요. 다시 시도해주세요.',
   BANNED_USER: '서비스 이용이 제한된 계정이에요.',
-  REQUIRED_INFO_MISSING: '소셜 로그인에서 이메일 등 필수 항목을 받지 못했어요. 동의 화면에서 모든 항목을 체크해주세요.',
+  REQUIRED_INFO_MISSING:
+    '소셜 로그인에서 이메일 등 필수 항목을 받지 못했어요. 동의 화면에서 모든 항목을 체크해주세요.',
   INTERNAL_SERVER_ERROR: '서버에서 일시적인 오류가 발생했어요. 잠시 후 다시 시도해주세요.',
   OAUTH_PLATFORM_ERROR: '카카오/구글 서버 응답에 문제가 있어요. 잠시 후 다시 시도해주세요.',
   access_denied: '소셜 로그인을 취소했어요.',
