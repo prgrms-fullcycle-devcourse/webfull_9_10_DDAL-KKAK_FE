@@ -297,9 +297,13 @@ export async function updateTrip(tripId: string, patch: Partial<Journey>): Promi
     return trip;
   } catch (e) {
     if (e instanceof ApiError && (e.status === 401 || e.status === 404 || e.status === 501)) {
+      // 백엔드가 아직 해당 기능을 제공하지 않는(404/501) 데모 환경일 때만 로컬로 폴백.
+      // 인증 모드에서 로컬에 해당 trip이 없으면(=백엔드 source of truth) 원래 에러를 유지한다.
+      const existsInLocal = loadJourneys().some((j) => j.id === tripId);
+      if (!existsInLocal) throw e;
       const list = updateJourney(tripId, patch);
       const updated = list.find((j) => j.id === tripId);
-      if (!updated) throw new Error('여정을 찾을 수 없어요.');
+      if (!updated) throw e;
       return updated;
     }
     throw e;
@@ -315,6 +319,9 @@ export async function deleteTrip(tripId: string): Promise<void> {
     await apiFetch<void>(`/trips/${tripId}`, { method: 'DELETE' });
   } catch (e) {
     if (e instanceof ApiError && (e.status === 401 || e.status === 404 || e.status === 501)) {
+      // updateTrip과 동일: 로컬에 해당 trip이 있을 때만 폴백 삭제.
+      const existsInLocal = loadJourneys().some((j) => j.id === tripId);
+      if (!existsInLocal) throw e;
       deleteJourney(tripId);
       return;
     }
