@@ -23,7 +23,11 @@ function shouldUseExpenseFallback(): boolean {
   return import.meta.env.VITE_USE_MOCK === 'true';
 }
 
-export function useExpensesQuery(journeyId: string | undefined, userId?: string) {
+export function useExpensesQuery(
+  journeyId: string | undefined,
+  userId?: string,
+  participantIdsByName?: Record<string, string>,
+) {
   return useQuery({
     queryKey: ['expenses', journeyId],
     enabled: !!journeyId,
@@ -42,6 +46,16 @@ export function useExpensesQuery(journeyId: string | undefined, userId?: string)
         }
         throw error;
       }
+    },
+    select: (expenses: Expense[]) => {
+      if (!participantIdsByName) return expenses;
+      const idToName = Object.fromEntries(
+        Object.entries(participantIdsByName).map(([name, id]) => [id, name]),
+      );
+      return expenses.map((e) => ({
+        ...e,
+        payer: (e.payerParticipantId && idToName[e.payerParticipantId]) || e.payer,
+      }));
     },
   });
 }
