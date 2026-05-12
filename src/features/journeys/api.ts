@@ -180,10 +180,14 @@ export async function createTrip(input: CreateTripInput): Promise<Journey> {
     });
     const trip = normalizeJourney(created);
 
-    // 여행 생성 후 참여자 개별 등록
+    // 여행 생성 후 참여자 개별 등록 (실패해도 여행 생성은 성공으로 처리)
     if (input.participants?.length) {
-      const participantIdsByName = await syncParticipants(trip.id, {}, input.participants);
-      return { ...trip, participants: input.participants, participantIdsByName };
+      try {
+        const participantIdsByName = await syncParticipants(trip.id, {}, input.participants);
+        return { ...trip, participants: input.participants, participantIdsByName };
+      } catch {
+        return { ...trip, participants: input.participants };
+      }
     }
 
     return trip;
