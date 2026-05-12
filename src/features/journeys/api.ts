@@ -42,8 +42,7 @@ function normalizeJourney(raw: Journey): Journey {
 
   const resolvedStartDate =
     typeof r.startDate === 'string' ? r.startDate.slice(0, 10) : raw.startDate;
-  const resolvedEndDate =
-    typeof r.endDate === 'string' ? r.endDate.slice(0, 10) : raw.endDate;
+  const resolvedEndDate = typeof r.endDate === 'string' ? r.endDate.slice(0, 10) : raw.endDate;
 
   const participantsRaw = r.participants as RawParticipant[] | undefined;
   const participants: string[] = [];
@@ -90,10 +89,7 @@ function serializeTrip(input: Partial<Journey> & { name?: string }): Record<stri
   return payload;
 }
 
-async function addParticipant(
-  tripId: string,
-  name: string,
-): Promise<{ id: string; name: string }> {
+async function addParticipant(tripId: string, name: string): Promise<{ id: string; name: string }> {
   return apiFetch(`/trips/${tripId}/participants`, {
     method: 'POST',
     body: JSON.stringify({ name }),
