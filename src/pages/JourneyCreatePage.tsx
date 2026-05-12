@@ -9,6 +9,7 @@ import {
   useJourneyQuery,
   useUpdateJourneyMutation,
 } from '@/features/journeys/queries';
+import { loadBudget, saveBudget } from '@/features/journeys/storage';
 import { demoRateForCurrency, getRealtimeRate } from '@/lib/currencyRates';
 import { useAuth } from '@/features/auth/useAuth';
 
@@ -85,14 +86,15 @@ export function JourneyCreatePage() {
         : demoRateForCurrency(existingJourney.currency),
     );
     setDates({ start: existingJourney.startDate, end: existingJourney.endDate });
-    setParticipants(existingJourney.participants.length ? existingJourney.participants : ['나']);
-    setBudgetKRW(
-      typeof existingJourney.budgetKRW === 'number' && existingJourney.budgetKRW > 0
+    setParticipants(existingJourney.participants.length ? existingJourney.participants : [authName || '나']);
+    // mock 모드: Journey 객체에 budgetKRW 포함 / API 모드: localStorage 별도 저장값 사용
+    const storedBudget =
+      (typeof existingJourney.budgetKRW === 'number' && existingJourney.budgetKRW > 0
         ? existingJourney.budgetKRW
-        : '',
-    );
+        : undefined) ?? loadBudget(existingJourney.id);
+    setBudgetKRW(storedBudget ?? '');
     setHydratedFromId(existingJourney.id);
-  }, [isEdit, existingJourney, hydratedFromId]);
+  }, [isEdit, existingJourney, hydratedFromId, authName]);
 
   // 신규 생성에서만 로그인 사용자명을 참가자 1번으로 prepend.
   // 수정 모드에서는 기존 participants/selfParticipant를 보존해야
@@ -173,6 +175,8 @@ export function JourneyCreatePage() {
           budgetKRW: budgetValue,
         },
       });
+      // API가 budgetKRW를 저장하지 않으므로 localStorage에 별도 보관
+      saveBudget(journeyId, budgetValue);
       nav(`/journeys/${journeyId}`, { replace: true });
       return;
     }
@@ -190,6 +194,8 @@ export function JourneyCreatePage() {
       selfParticipant: selfN,
       budgetKRW: budgetValue,
     });
+    // API가 budgetKRW를 저장하지 않으므로 localStorage에 별도 보관
+    saveBudget(newJourney.id, budgetValue);
     nav(`/journeys/${newJourney.id}`);
   };
   async function handleDelete() {

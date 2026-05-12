@@ -34,10 +34,22 @@ export function sumMySpendLocal(journey: Journey, expenses: Expense[]) {
   return expenses.reduce((acc, e) => acc + expenseMyShareLocal(journey, e), 0);
 }
 export function sumMySpendKRW(journey: Journey, expenses: Expense[]) {
-  return sumMySpendLocal(journey, expenses) * journey.rate;
+  return expenses.reduce((acc, e) => {
+    const myShareLocal = expenseMyShareLocal(journey, e);
+    if (myShareLocal === 0) return acc;
+    // amountKrw가 저장돼 있으면 비율로 직접 사용 (백엔드 환산값 그대로)
+    if (e.amountKrw && e.amountLocal > 0) {
+      return acc + Math.round((myShareLocal / e.amountLocal) * e.amountKrw);
+    }
+    // fallback: fxRateTripToKrw → journey.rate 순
+    return acc + Math.round(myShareLocal * (e.fxRateTripToKrw ?? journey.rate));
+  }, 0);
 }
 export function sumTotalKRW(journey: Journey, expenses: Expense[]) {
-  return expenses.reduce((acc, e) => acc + e.amountLocal * journey.rate, 0);
+  return expenses.reduce((acc, e) => {
+    const rate = e.fxRateTripToKrw ?? journey.rate;
+    return acc + (e.amountKrw ?? Math.round(e.amountLocal * rate));
+  }, 0);
 }
 export function sumTotalLocal(expenses: Expense[]) {
   return expenses.reduce((acc, e) => acc + e.amountLocal, 0);

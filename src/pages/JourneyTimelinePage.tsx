@@ -6,6 +6,7 @@ import { TopBar } from '@/components/layout/TopBar';
 import { useAuth } from '@/features/auth/useAuth';
 import { useExpensesQuery } from '@/features/expenses/queries';
 import { useJourneyQuery } from '@/features/journeys/queries';
+import { loadBudget } from '@/features/journeys/storage';
 import { expenseMyShareLocal, sumMySpendKRW, sumMySpendLocal } from '@/features/settlement/calc';
 import { dateKeyOf, timeLabelOf } from '@/lib/datetime';
 import { formatKRW, formatLocal } from '@/lib/money';
@@ -23,7 +24,14 @@ export function JourneyTimelinePage() {
   const { journeyId } = useParams();
   const { user } = useAuth();
 
-  const { data: journey } = useJourneyQuery(journeyId);
+  const { data: journeyRaw } = useJourneyQuery(journeyId);
+  // API가 budgetKRW를 반환하지 않으므로 localStorage에서 보완
+  const journey = useMemo(() => {
+    if (!journeyRaw) return journeyRaw;
+    if (journeyRaw.budgetKRW != null) return journeyRaw;
+    const stored = loadBudget(journeyRaw.id);
+    return stored !== undefined ? { ...journeyRaw, budgetKRW: stored } : journeyRaw;
+  }, [journeyRaw]);
   const { data: expenses = [] } = useExpensesQuery(journeyId, user?.id, journey?.participantIdsByName);
 
   const grouped = useMemo(() => {
@@ -330,13 +338,13 @@ export function JourneyTimelinePage() {
                               <span className="ml-0.5 text-xs font-bold">{journey.currency}</span>
                             </p>
                             <p className="mt-1 text-[10px] font-bold tracking-tighter text-slate-300">
-                              약 {formatKRW(e.amountLocal * journey.rate)}원
+                              약 {formatKRW(e.amountKrw ?? Math.round(e.amountLocal * (e.fxRateTripToKrw ?? journey.rate)))}원
                             </p>
                             {isShared ? (
                               <p className="mt-1 text-[10px] font-bold tracking-tighter text-blue-500">
                                 🏷️ {formatLocal(myShare)} {journey.currency}
                                 <span className="ml-1 text-slate-400">
-                                  (약 {formatKRW(myShare * journey.rate)}원)
+                                  (약 {formatKRW(Math.round(myShare * (e.fxRateTripToKrw ?? journey.rate)))}원)
                                 </span>
                               </p>
                             ) : null}
