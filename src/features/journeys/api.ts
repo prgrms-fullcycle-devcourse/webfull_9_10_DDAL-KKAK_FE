@@ -53,6 +53,14 @@ const STATUS_FROM_API: Record<string, Journey['status']> = {
   COMPLETED: 'ended',
 };
 
+const CURRENCY_TO_COUNTRY: Record<string, string> = {
+  KRW: '한국',
+  JPY: '일본',
+  USD: '미국',
+  EUR: '유럽',
+  CNY: '중국',
+};
+
 function normalizeJourney(raw: Journey): Journey {
   const r = raw as unknown as Record<string, unknown>;
 
@@ -86,11 +94,17 @@ function normalizeJourney(raw: Journey): Journey {
     typeof r.startDate === 'string' ? r.startDate.slice(0, 10) : raw.startDate;
   const resolvedEndDate = typeof r.endDate === 'string' ? r.endDate.slice(0, 10) : raw.endDate;
 
+  const resolvedCountry =
+    (typeof r.country === 'string' && r.country.trim()) ||
+    CURRENCY_TO_COUNTRY[resolvedCurrency] ||
+    '한국';
+
   const { participants, participantIdsByName } = participantsFromTripRecord(r);
 
   return {
     ...raw,
     name: resolvedName || raw.name,
+    country: resolvedCountry,
     currency: resolvedCurrency as Journey['currency'],
     rate: resolvedRate,
     rateMode: resolvedRateMode,

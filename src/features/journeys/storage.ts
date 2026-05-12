@@ -58,5 +58,44 @@ export function deleteJourney(id: string): Journey[] {
   const expenses = loadAllExpenses();
   saveAllExpenses(expenses.filter((e) => e.journeyId !== id));
 
+  // 예산 정보도 함께 삭제
+  deleteBudget(id);
+
   return next;
+}
+
+// ─── 목표 예산 (API 미지원 필드 → tripId 기준 localStorage 별도 저장) ───
+
+const BUDGET_KEY = 'tt_trip_budgets_v1';
+
+function loadBudgetMap(): Record<string, number> {
+  try {
+    const raw = localStorage.getItem(BUDGET_KEY);
+    if (!raw) return {};
+    return JSON.parse(raw) as Record<string, number>;
+  } catch {
+    return {};
+  }
+}
+
+/** 여행 ID로 목표 예산(원) 조회. 없으면 undefined. */
+export function loadBudget(tripId: string): number | undefined {
+  const map = loadBudgetMap();
+  const v = map[tripId];
+  return typeof v === 'number' && v > 0 ? v : undefined;
+}
+
+/** 목표 예산 저장. budget이 없거나 0이하면 해당 항목을 삭제. */
+export function saveBudget(tripId: string, budget: number | undefined): void {
+  const map = loadBudgetMap();
+  if (budget !== undefined && budget > 0) {
+    map[tripId] = budget;
+  } else {
+    delete map[tripId];
+  }
+  localStorage.setItem(BUDGET_KEY, JSON.stringify(map));
+}
+
+function deleteBudget(tripId: string): void {
+  saveBudget(tripId, undefined);
 }
