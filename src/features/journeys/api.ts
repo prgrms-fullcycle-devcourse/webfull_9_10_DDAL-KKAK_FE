@@ -5,6 +5,48 @@ import { addJourney, deleteJourney, loadJourneys, updateJourney } from './storag
 
 type RawParticipant = string | { id?: string; name?: string };
 
+/** GET /trips·GET /trips/:id 등의 participants 배열 `{ id, name }[]` → Journey 필드로 통합 */
+function participantsFromTripRecord(r: Record<string, unknown>): {
+  participants: string[];
+  participantIdsByName: Record<string, string>;
+} {
+  const buckets: RawParticipant[] = [];
+  if (Array.isArray(r.participants)) buckets.push(...(r.participants as RawParticipant[]));
+
+  const participants: string[] = [];
+  const participantIdsByName: Record<string, string> = {};
+  const seen = new Set<string>();
+
+  for (const p of buckets) {
+    if (typeof p === 'string') {
+      const t = p.trim();
+      if (!t || seen.has(t)) continue;
+      seen.add(t);
+      participants.push(t);
+      continue;
+    }
+    if (!p || typeof p !== 'object') continue;
+    const o = p as Record<string, unknown>;
+    const name =
+      (typeof o.name === 'string' && o.name.trim()) ||
+      (typeof o.displayName === 'string' && o.displayName.trim()) ||
+      (typeof o.nickname === 'string' && o.nickname.trim()) ||
+      '';
+    const id =
+      (typeof o.id === 'string' && o.id.trim()) ||
+      (typeof o.memberId === 'string' && o.memberId.trim()) ||
+      (typeof o.userId === 'string' && o.userId.trim()) ||
+      '';
+    if (!name) continue;
+    if (seen.has(name)) continue;
+    seen.add(name);
+    participants.push(name);
+    if (id) participantIdsByName[name] = id;
+  }
+
+  return { participants, participantIdsByName };
+}
+
 const STATUS_FROM_API: Record<string, Journey['status']> = {
   PLANNING: 'planned',
   ONGOING: 'active',
@@ -44,23 +86,7 @@ function normalizeJourney(raw: Journey): Journey {
     typeof r.startDate === 'string' ? r.startDate.slice(0, 10) : raw.startDate;
   const resolvedEndDate = typeof r.endDate === 'string' ? r.endDate.slice(0, 10) : raw.endDate;
 
-  const participantsRaw = r.participants as RawParticipant[] | undefined;
-  const participants: string[] = [];
-  const participantIdsByName: Record<string, string> = {};
-
-  if (Array.isArray(participantsRaw)) {
-    for (const p of participantsRaw) {
-      if (typeof p === 'string') {
-        participants.push(p);
-        continue;
-      }
-      const name = typeof p.name === 'string' ? p.name.trim() : '';
-      const id = typeof p.id === 'string' ? p.id.trim() : '';
-      if (!name) continue;
-      participants.push(name);
-      if (id) participantIdsByName[name] = id;
-    }
-  }
+  const { participants, participantIdsByName } = participantsFromTripRecord(r);
 
   return {
     ...raw,
@@ -123,7 +149,8 @@ async function syncParticipants(
   return next;
 }
 
-function isMockMode(): boolean {
+/** 토큰 없음 또는 명시 mock → 여행/정산 등은 로컬 스토리지·클라이언트 계산과 동일 기준으로 맞출 것 */
+export function isMockMode(): boolean {
   const hasToken = !!localStorage.getItem('tt_access_token_v1');
   return import.meta.env.VITE_USE_MOCK === 'true' || !hasToken;
 }
