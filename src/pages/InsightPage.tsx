@@ -10,7 +10,7 @@ export function InsightPage() {
   const { journeyId } = useParams();
   const { user } = useAuth();
   const { data: journey } = useJourneyQuery(journeyId);
-  const { data: expenses = [] } = useExpensesQuery(journeyId, user?.id);
+  const { data: expenses = [] } = useExpensesQuery(journeyId, user?.id, journey?.participantIdsByName);
 
   const summary = useMemo(() => {
     if (!expenses.length) return null;
