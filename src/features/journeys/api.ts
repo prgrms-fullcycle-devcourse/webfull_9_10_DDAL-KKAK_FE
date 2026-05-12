@@ -10,11 +10,6 @@ const STATUS_FROM_API: Record<string, Journey['status']> = {
   ONGOING: 'active',
   COMPLETED: 'ended',
 };
-const STATUS_TO_API: Record<Journey['status'], string> = {
-  planned: 'PLANNING',
-  active: 'ONGOING',
-  ended: 'COMPLETED',
-};
 
 function normalizeJourney(raw: Journey): Journey {
   const r = raw as unknown as Record<string, unknown>;
@@ -49,6 +44,7 @@ function normalizeJourney(raw: Journey): Journey {
     typeof r.startDate === 'string' ? r.startDate.slice(0, 10) : raw.startDate;
   const resolvedEndDate =
     typeof r.endDate === 'string' ? r.endDate.slice(0, 10) : raw.endDate;
+
   const participantsRaw = r.participants as RawParticipant[] | undefined;
   const participants: string[] = [];
   const participantIdsByName: Record<string, string> = {};
@@ -92,6 +88,43 @@ function serializeTrip(input: Partial<Journey> & { name?: string }): Record<stri
   if (input.endDate !== undefined) payload.endDate = input.endDate;
 
   return payload;
+}
+
+async function addParticipant(
+  tripId: string,
+  name: string,
+): Promise<{ id: string; name: string }> {
+  return apiFetch(`/trips/${tripId}/participants`, {
+    method: 'POST',
+    body: JSON.stringify({ name }),
+  });
+}
+
+async function removeParticipant(tripId: string, participantId: string): Promise<void> {
+  await apiFetch(`/trips/${tripId}/participants/${participantId}`, { method: 'DELETE' });
+}
+
+/**
+ * 기존 참여자(existingIds)와 새 목록(nextNames)을 비교해 추가/삭제.
+ * 이름이 existingIds에 없으면 추가, nextNames에 없으면 삭제.
+ */
+async function syncParticipants(
+  tripId: string,
+  existingIds: Record<string, string>,
+  nextNames: string[],
+): Promise<Record<string, string>> {
+  const toDelete = Object.entries(existingIds).filter(([name]) => !nextNames.includes(name));
+  const toAdd = nextNames.filter((name) => !(name in existingIds));
+
+  await Promise.all(toDelete.map(([, id]) => removeParticipant(tripId, id)));
+
+  const added = await Promise.all(toAdd.map((name) => addParticipant(tripId, name)));
+
+  const next = { ...existingIds };
+  for (const [name] of toDelete) delete next[name];
+  for (const { id, name } of added) next[name] = id;
+
+  return next;
 }
 
 function isMockMode(): boolean {
@@ -145,7 +178,15 @@ export async function createTrip(input: CreateTripInput): Promise<Journey> {
       method: 'POST',
       body: JSON.stringify(serializeTrip(input)),
     });
-    return normalizeJourney(created);
+    const trip = normalizeJourney(created);
+
+    // 여행 생성 후 참여자 개별 등록
+    if (input.participants?.length) {
+      const participantIdsByName = await syncParticipants(trip.id, {}, input.participants);
+      return { ...trip, participants: input.participants, participantIdsByName };
+    }
+
+    return trip;
   } catch (e) {
     if (e instanceof ApiError && (e.status === 401 || e.status === 404 || e.status === 501)) {
       const id = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -169,7 +210,16 @@ export async function updateTrip(tripId: string, patch: Partial<Journey>): Promi
       method: 'PATCH',
       body: JSON.stringify(serializeTrip(patch)),
     });
-    return normalizeJourney(updated);
+    const trip = normalizeJourney(updated);
+
+    // 참여자 diff: 기존 ID 맵과 새 목록 비교
+    if (patch.participants !== undefined) {
+      const existingIds = patch.participantIdsByName ?? trip.participantIdsByName ?? {};
+      const participantIdsByName = await syncParticipants(tripId, existingIds, patch.participants);
+      return { ...trip, participants: patch.participants, participantIdsByName };
+    }
+
+    return trip;
   } catch (e) {
     if (e instanceof ApiError && (e.status === 401 || e.status === 404 || e.status === 501)) {
       const list = updateJourney(tripId, patch);
