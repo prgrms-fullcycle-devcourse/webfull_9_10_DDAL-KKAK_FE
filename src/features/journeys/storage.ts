@@ -58,9 +58,10 @@ export function deleteJourney(id: string): Journey[] {
   const expenses = loadAllExpenses();
   saveAllExpenses(expenses.filter((e) => e.journeyId !== id));
 
-  // 예산·참여자 캐시도 함께 삭제
+  // 예산·참여자·환율 캐시도 함께 삭제
   deleteBudget(id);
   deleteParticipantsCache(id);
+  deleteRateCache(id);
 
   return next;
 }
@@ -144,4 +145,41 @@ function deleteParticipantsCache(tripId: string): void {
   const map = loadParticipantsMap();
   delete map[tripId];
   localStorage.setItem(PARTICIPANTS_KEY, JSON.stringify(map));
+}
+
+// ─── 환율 캐시 (백엔드가 fixedExchangeRate를 반환하지 않는 경우 localStorage로 보완) ───
+
+const RATE_KEY = 'tt_trip_rates_v1';
+
+type RateCache = {
+  rate: number;
+  rateMode: string;
+};
+
+function loadRateMap(): Record<string, RateCache> {
+  try {
+    const raw = localStorage.getItem(RATE_KEY);
+    if (!raw) return {};
+    return JSON.parse(raw) as Record<string, RateCache>;
+  } catch {
+    return {};
+  }
+}
+
+/** 여행 ID로 저장된 환율 조회. 없으면 undefined. */
+export function loadRateCache(tripId: string): RateCache | undefined {
+  return loadRateMap()[tripId];
+}
+
+/** 환율 저장 (rate > 1인 경우만 의미 있음). */
+export function saveRateCache(tripId: string, rate: number, rateMode: string): void {
+  const map = loadRateMap();
+  map[tripId] = { rate, rateMode };
+  localStorage.setItem(RATE_KEY, JSON.stringify(map));
+}
+
+function deleteRateCache(tripId: string): void {
+  const map = loadRateMap();
+  delete map[tripId];
+  localStorage.setItem(RATE_KEY, JSON.stringify(map));
 }

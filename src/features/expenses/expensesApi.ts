@@ -31,15 +31,6 @@ function expensesUrl(path: string): string {
   return new URL(p, apiBase()).toString();
 }
 
-/** localStorage에서 Bearer 토큰 조회 */
-function getAuthHeaders(userId: string): Record<string, string> {
-  const token = localStorage.getItem('tt_access_token_v1');
-  return {
-    'x-user-id': userId,
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-  };
-}
-
 async function parseJson(res: Response): Promise<unknown> {
   const text = await res.text();
   if (!text) return null;
@@ -99,9 +90,13 @@ function toExpensePayload(
   } else if ('payer' in expense && expense.payer !== undefined) {
     payload.payerParticipantId = expense.payer;
   }
-  payload.fxRateTripToKrw = fxRate ?? 1;
-  payload.amountKrw = amountKrw ?? amountOriginal ?? 0;
+  if (fxRate !== undefined) payload.fxRateTripToKrw = fxRate;
+  if (amountKrw !== undefined) payload.amountKrw = amountKrw;
   if ('fxMode' in expense && expense.fxMode !== undefined) payload.fxMode = expense.fxMode;
+  if ('splitMode' in expense && expense.splitMode !== undefined) payload.splitMode = expense.splitMode;
+  if ('splitWith' in expense && expense.splitWith !== undefined) payload.splitWith = expense.splitWith;
+  if ('method' in expense && expense.method !== undefined) payload.method = expense.method;
+  if ('emoji' in expense && expense.emoji !== undefined) payload.emoji = expense.emoji;
   if ('category' in expense && expense.category !== undefined) payload.category = expense.category;
   return payload;
 }
@@ -130,9 +125,19 @@ function fromApiExpense(raw: unknown, fallback: Expense): Expense {
     paidAt: typeof raw.spentAt === 'string' ? raw.spentAt : fallback.paidAt,
     payerParticipantId:
       typeof raw.payerParticipantId === 'string' ? raw.payerParticipantId : fallback.payerParticipantId,
-    payer: typeof raw.payerParticipantId === 'string' ? raw.payerParticipantId : fallback.payer,
+    // payer: payerName(우선) → payerParticipantId → fallback 순. payerParticipantId만 있으면
+    // 이름 역변환은 components 레이어(useExpensesQuery)에서 수행.
+    payer:
+      typeof raw.payerName === 'string' && raw.payerName.trim()
+        ? raw.payerName.trim()
+        : typeof raw.payerParticipantId === 'string'
+          ? raw.payerParticipantId
+          : fallback.payer,
+    // splitWith: 백엔드가 반환하면 사용, 없으면 fallback
+    splitWith: Array.isArray(raw.splitWith)
+      ? (raw.splitWith as unknown[]).filter((s): s is string => typeof s === 'string')
+      : fallback.splitWith,
     comment: typeof raw.note === 'string' ? raw.note : fallback.comment,
-    category: typeof raw.category === 'string' ? raw.category : fallback.category,
     fxMode: raw.fxMode === 'FIXED' || raw.fxMode === 'REALTIME' ? raw.fxMode : fallback.fxMode,
     fxRateTripToKrw:
       typeof raw.fxRateTripToKrw === 'number'
@@ -147,8 +152,7 @@ function fromApiExpense(raw: unknown, fallback: Expense): Expense {
 export async function listExpensesApi(params: { tripId: string; userId: string }): Promise<Expense[]> {
   const res = await fetch(expensesUrl(`expenses?tripId=${encodeURIComponent(params.tripId)}`), {
     method: 'GET',
-    credentials: 'include',
-    headers: getAuthHeaders(params.userId),
+    headers: { 'x-user-id': params.userId },
   });
   const body = await parseJson(res);
   const mapped = mapExpenseError(body);
@@ -179,8 +183,7 @@ export async function listExpensesApi(params: { tripId: string; userId: string }
 export async function getExpenseApi(params: { expenseId: string; userId: string }): Promise<Expense> {
   const res = await fetch(expensesUrl(`expenses/${encodeURIComponent(params.expenseId)}`), {
     method: 'GET',
-    credentials: 'include',
-    headers: getAuthHeaders(params.userId),
+    headers: { 'x-user-id': params.userId },
   });
   const body = await parseJson(res);
   const mapped = mapExpenseError(body);
@@ -209,8 +212,7 @@ export async function getExpenseApi(params: { expenseId: string; userId: string 
 export async function deleteExpenseApi(params: { expenseId: string; userId: string }): Promise<void> {
   const res = await fetch(expensesUrl(`expenses/${encodeURIComponent(params.expenseId)}`), {
     method: 'DELETE',
-    credentials: 'include',
-    headers: getAuthHeaders(params.userId),
+    headers: { 'x-user-id': params.userId },
   });
   const body = await parseJson(res);
   const mapped = mapExpenseError(body);
@@ -249,10 +251,9 @@ export async function createExpenseApi(params: {
 }): Promise<Expense> {
   const res = await fetch(expensesUrl('expenses'), {
     method: 'POST',
-    credentials: 'include',
     headers: {
       'content-type': 'application/json',
-      ...getAuthHeaders(params.userId),
+      'x-user-id': params.userId,
     },
     body: JSON.stringify(toExpensePayload(params.expense)),
   });
@@ -273,10 +274,9 @@ export async function patchExpenseApi(params: {
 }): Promise<Expense> {
   const res = await fetch(expensesUrl(`expenses/${encodeURIComponent(params.expenseId)}`), {
     method: 'PATCH',
-    credentials: 'include',
     headers: {
       'content-type': 'application/json',
-      ...getAuthHeaders(params.userId),
+      'x-user-id': params.userId,
     },
     body: JSON.stringify(toExpensePayload(params.patch)),
   });

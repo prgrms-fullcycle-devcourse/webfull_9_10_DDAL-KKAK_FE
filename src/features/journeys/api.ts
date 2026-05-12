@@ -6,7 +6,9 @@ import {
   deleteJourney,
   loadJourneys,
   loadParticipantsCache,
+  loadRateCache,
   saveParticipantsCache,
+  saveRateCache,
   updateJourney,
 } from './storage';
 
@@ -198,7 +200,20 @@ export async function fetchTrip(tripId: string): Promise<Journey> {
   }
   try {
     const trip = await apiFetch<Journey>(`/trips/${tripId}`);
-    const normalized = normalizeJourney(trip);
+    let normalized = normalizeJourney(trip);
+
+    // 백엔드가 fixedExchangeRate를 반환하지 않으면 localStorage 캐시로 보완
+    if (normalized.rate === 1 && normalized.currency !== 'KRW') {
+      const cachedRate = loadRateCache(tripId);
+      if (cachedRate && cachedRate.rate > 1) {
+        normalized = {
+          ...normalized,
+          rate: cachedRate.rate,
+          rateMode: cachedRate.rateMode as Journey['rateMode'],
+        };
+      }
+    }
+
     // 백엔드가 participants를 비워서 반환하면 localStorage 캐시로 보완
     if (!normalized.participants.length) {
       const cached = loadParticipantsCache(tripId);
@@ -236,6 +251,11 @@ export async function createTrip(input: CreateTripInput): Promise<Journey> {
       body: JSON.stringify(serializeTrip(input)),
     });
     const trip = normalizeJourney(created);
+
+    // 환율 캐시 저장 (백엔드가 fixedExchangeRate를 내려주지 않을 때 대비)
+    if (input.rate && input.rate > 1) {
+      saveRateCache(trip.id, input.rate, input.rateMode ?? 'fixed');
+    }
 
     // 여행 생성 후 참여자 개별 등록 (실패해도 여행 생성은 성공으로 처리)
     if (input.participants?.length) {
@@ -276,6 +296,12 @@ export async function updateTrip(tripId: string, patch: Partial<Journey>): Promi
     });
     const trip = normalizeJourney(updated);
 
+    // 환율 캐시 저장 (백엔드가 fixedExchangeRate를 내려주지 않을 때 대비)
+    const patchedRate = patch.rate ?? trip.rate;
+    if (patchedRate && patchedRate > 1) {
+      saveRateCache(tripId, patchedRate, patch.rateMode ?? trip.rateMode);
+    }
+
     // 참여자 diff: 기존 ID 맵과 새 목록 비교 (실패해도 여행 수정은 성공 유지)
     if (patch.participants !== undefined) {
       try {
@@ -297,9 +323,13 @@ export async function updateTrip(tripId: string, patch: Partial<Journey>): Promi
     return trip;
   } catch (e) {
     if (e instanceof ApiError && (e.status === 401 || e.status === 404 || e.status === 501)) {
+      // 백엔드가 아직 해당 기능을 제공하지 않는(404/501) 데모 환경일 때만 로컬로 폴백.
+      // 인증 모드에서 로컬에 해당 trip이 없으면(=백엔드 source of truth) 원래 에러를 유지한다.
+      const existsInLocal = loadJourneys().some((j) => j.id === tripId);
+      if (!existsInLocal) throw e;
       const list = updateJourney(tripId, patch);
       const updated = list.find((j) => j.id === tripId);
-      if (!updated) throw new Error('여정을 찾을 수 없어요.');
+      if (!updated) throw e;
       return updated;
     }
     throw e;
@@ -315,6 +345,9 @@ export async function deleteTrip(tripId: string): Promise<void> {
     await apiFetch<void>(`/trips/${tripId}`, { method: 'DELETE' });
   } catch (e) {
     if (e instanceof ApiError && (e.status === 401 || e.status === 404 || e.status === 501)) {
+      // updateTrip과 동일: 로컬에 해당 trip이 있을 때만 폴백 삭제.
+      const existsInLocal = loadJourneys().some((j) => j.id === tripId);
+      if (!existsInLocal) throw e;
       deleteJourney(tripId);
       return;
     }

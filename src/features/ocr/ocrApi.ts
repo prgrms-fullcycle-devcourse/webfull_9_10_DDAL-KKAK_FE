@@ -36,12 +36,7 @@ export type OcrParsedResult = {
   purchasedAt: string;
 };
 
-export type OcrJobStatus =
-  | 'PENDING'
-  | 'PROCESSING'
-  | 'SUCCESS'
-  | 'FAILED'
-  | 'EXPIRED';
+export type OcrJobStatus = 'PENDING' | 'PROCESSING' | 'SUCCESS' | 'FAILED' | 'EXPIRED';
 
 export type OcrJobResult = {
   receiptId: string;
@@ -119,7 +114,14 @@ export function getOcrErrorMessage(error: unknown): string {
       case 'OCR_011':
         return '여정 정보가 누락되었어요. 다시 시도해 주세요.';
       case 'AUTH_001':
+      case 'AUTH_002':
         return '로그인이 필요해요.';
+      case 'TRIP_009':
+        return '존재하지 않는 여행이에요. 여행을 다시 선택해 주세요.';
+      case 'TRIP_010':
+        return '해당 여행에 접근 권한이 없어요.';
+      case 'COMMON_001':
+        return '일시적인 서버 오류가 발생했어요. 잠시 후 다시 시도해 주세요.';
       default:
         break;
     }
@@ -263,7 +265,10 @@ export async function pollReceiptOcrJob(
   throw new OcrApiError('OCR 분석 시간이 초과되었어요. 잠시 후 다시 시도해 주세요.');
 }
 
-export async function deleteReceiptOcrJob(params: { receiptId: string; userId: string }): Promise<void> {
+export async function deleteReceiptOcrJob(params: {
+  receiptId: string;
+  userId: string;
+}): Promise<void> {
   const { receiptId, userId } = params;
   const res = await fetch(expensesUrl(`expenses/ocr/${encodeURIComponent(receiptId)}`), {
     method: 'DELETE',
