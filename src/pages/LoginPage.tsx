@@ -51,16 +51,18 @@ export function LoginPage() {
           >
             구글로 시작
           </button>
-          <button
-            type="button"
-            onClick={() => {
-              login({ id: 'demo-user', name: '영아' });
-              nav(next, { replace: true });
-            }}
-            className="w-full cursor-pointer rounded-2xl border border-slate-200 bg-white py-3 text-xs font-bold text-slate-500 active:scale-[0.99]"
-          >
-            데모 사용자로 진입 (개발용)
-          </button>
+          {import.meta.env.DEV ? (
+            <button
+              type="button"
+              onClick={() => {
+                login({ id: 'demo-user', name: '영아' });
+                nav(next, { replace: true });
+              }}
+              className="w-full cursor-pointer rounded-2xl border border-slate-200 bg-white py-3 text-xs font-bold text-slate-500 active:scale-[0.99]"
+            >
+              데모 사용자로 진입 (개발용)
+            </button>
+          ) : null}
         </div>
 
         <p className="mt-10 text-[11px] font-bold text-slate-300">

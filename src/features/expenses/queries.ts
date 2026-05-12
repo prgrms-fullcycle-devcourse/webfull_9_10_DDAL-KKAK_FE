@@ -17,45 +17,30 @@ import {
 } from '@/features/expenses/storage';
 import { loadJourneys } from '@/features/journeys/storage';
 
-function shouldUseExpenseFallback(): boolean {
-  // 명시적 mock 설정 시에만 로컬스토리지로 폴백.
-  // userId 없으면 각 mutation에서 직접 처리.
-  return import.meta.env.VITE_USE_MOCK === 'true';
+async function sleep(ms: number) {
+  await new Promise((r) => setTimeout(r, ms));
 }
 
-export function useExpensesQuery(
-  journeyId: string | undefined,
-  userId?: string,
-  participantIdsByName?: Record<string, string>,
-) {
+function shouldUseExpenseFallback(): boolean {
+  return import.meta.env.DEV || import.meta.env.VITE_USE_MOCK === 'true';
+}
+
+export function useExpensesQuery(journeyId: string | undefined, userId?: string) {
   return useQuery({
     queryKey: ['expenses', journeyId],
     enabled: !!journeyId,
     queryFn: async (): Promise<Expense[]> => {
+      await sleep(80);
       if (!journeyId) return [];
       if (!userId) return loadAllExpenses().filter((e) => e.journeyId === journeyId);
       try {
         return await listExpensesApi({ tripId: journeyId, userId });
       } catch (error) {
-        if (
-          shouldUseExpenseFallback() &&
-          error instanceof ExpenseApiError &&
-          error.status === 404
-        ) {
+        if (shouldUseExpenseFallback() && error instanceof ExpenseApiError && error.status === 404) {
           return loadAllExpenses().filter((e) => e.journeyId === journeyId);
         }
         throw error;
       }
-    },
-    select: (expenses: Expense[]) => {
-      if (!participantIdsByName) return expenses;
-      const idToName = Object.fromEntries(
-        Object.entries(participantIdsByName).map(([name, id]) => [id, name]),
-      );
-      return expenses.map((e) => ({
-        ...e,
-        payer: (e.payerParticipantId && idToName[e.payerParticipantId]) || e.payer,
-      }));
     },
   });
 }
@@ -64,19 +49,14 @@ export function useAllExpensesQuery(userId?: string) {
   return useQuery({
     queryKey: ['expenses'],
     queryFn: async (): Promise<Expense[]> => {
+      await sleep(80);
       if (!userId) return loadAllExpenses();
       try {
         const tripIds = loadJourneys().map((j) => j.id);
-        const rows = await Promise.all(
-          tripIds.map((tripId) => listExpensesApi({ tripId, userId })),
-        );
+        const rows = await Promise.all(tripIds.map((tripId) => listExpensesApi({ tripId, userId })));
         return rows.flat();
       } catch (error) {
-        if (
-          shouldUseExpenseFallback() &&
-          error instanceof ExpenseApiError &&
-          error.status === 404
-        ) {
+        if (shouldUseExpenseFallback() && error instanceof ExpenseApiError && error.status === 404) {
           return loadAllExpenses();
         }
         throw error;
@@ -89,6 +69,7 @@ export function useAddExpenseMutation(userId?: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (expense: Expense) => {
+      await sleep(100);
       if (!userId) {
         return addExpense(expense).find((e) => e.id === expense.id) ?? expense;
       }
@@ -117,16 +98,13 @@ export function useExpenseQuery(expenseId: string | undefined, userId?: string) 
     queryKey: ['expense', expenseId],
     enabled: !!expenseId,
     queryFn: async (): Promise<Expense> => {
+      await sleep(80);
       if (expenseId && userId) {
         try {
           return await getExpenseApi({ expenseId, userId });
         } catch (error) {
           if (
-            !(
-              shouldUseExpenseFallback() &&
-              error instanceof ExpenseApiError &&
-              error.status === 404
-            )
+            !(shouldUseExpenseFallback() && error instanceof ExpenseApiError && error.status === 404)
           ) {
             throw error;
           }
@@ -149,6 +127,7 @@ export function useUpdateExpenseMutation(userId?: string) {
       id: string;
       patch: Omit<Partial<Expense>, 'receiptId'> & { journeyId: string; receiptId?: string | null };
     }) => {
+      await sleep(100);
       const current = findExpenseById(id);
       if (!current) throw new Error('소비 내역을 찾을 수 없어요.');
       const fallback: Expense = {
@@ -156,11 +135,7 @@ export function useUpdateExpenseMutation(userId?: string) {
         ...patch,
         id,
         receiptId:
-          patch.receiptId === null
-            ? undefined
-            : patch.receiptId === undefined
-              ? current.receiptId
-              : patch.receiptId,
+          patch.receiptId === null ? undefined : patch.receiptId === undefined ? current.receiptId : patch.receiptId,
         updatedAt: new Date().toISOString(),
       };
       if (userId) {
@@ -168,11 +143,7 @@ export function useUpdateExpenseMutation(userId?: string) {
           return await patchExpenseApi({ expenseId: id, patch, fallback, userId });
         } catch (error) {
           if (
-            !(
-              shouldUseExpenseFallback() &&
-              error instanceof ExpenseApiError &&
-              error.status === 404
-            )
+            !(shouldUseExpenseFallback() && error instanceof ExpenseApiError && error.status === 404)
           ) {
             throw error;
           }
@@ -198,16 +169,13 @@ export function useDeleteExpenseMutation(userId?: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async ({ id, journeyId }: { id: string; journeyId: string }) => {
+      await sleep(100);
       if (userId) {
         try {
           await deleteExpenseApi({ expenseId: id, userId });
         } catch (error) {
           if (
-            !(
-              shouldUseExpenseFallback() &&
-              error instanceof ExpenseApiError &&
-              error.status === 404
-            )
+            !(shouldUseExpenseFallback() && error instanceof ExpenseApiError && error.status === 404)
           ) {
             throw error;
           }

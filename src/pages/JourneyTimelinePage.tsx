@@ -32,7 +32,7 @@ export function JourneyTimelinePage() {
     const stored = loadBudget(journeyRaw.id);
     return stored !== undefined ? { ...journeyRaw, budgetKRW: stored } : journeyRaw;
   }, [journeyRaw]);
-  const { data: expenses = [] } = useExpensesQuery(journeyId, user?.id, journey?.participantIdsByName);
+  const { data: expenses = [] } = useExpensesQuery(journeyId, user?.id);
 
   const grouped = useMemo(() => {
     const by: Record<string, typeof expenses> = {};
