@@ -13,6 +13,7 @@ import { useToast } from '@/components/ui/useToast';
 import { nowLocalIso, toStoredWallClock } from '@/lib/datetime';
 import { useAuth } from '@/features/auth/useAuth';
 import { getExpenseErrorMessage } from '@/features/expenses/expensesApi';
+import { demoRateForCurrency, getRealtimeRate } from '@/lib/currencyRates';
 
 type Mode = 'create' | 'edit' | 'ocr';
 
@@ -147,9 +148,23 @@ export function ExpenseForm({
     if (src.receiptId) setReceiptId(src.receiptId);
   }, [existing, initialDraft]);
 
+  // ── 실효 환율: fixed → journey.rate 고정, realtime → API에서 최신 환율 조회 ──
+  const [effectiveRate, setEffectiveRate] = useState<number>(journey?.rate ?? 1);
+
+  useEffect(() => {
+    if (!journey) return;
+    if (journey.rateMode === 'fixed' || journey.currency === 'KRW') {
+      setEffectiveRate(journey.rate);
+      return;
+    }
+    // realtime: 백엔드 환율 API 조회 → 실패 시 demo 값으로 폴백
+    getRealtimeRate(journey.currency, 'KRW')
+      .then(setEffectiveRate)
+      .catch(() => setEffectiveRate(demoRateForCurrency(journey.currency)));
+  }, [journey]);
+
   // ── 계산 ──
-  const rate = journey?.rate ?? 1;
-  const amountKRW = typeof amountLocal === 'number' ? Math.round(amountLocal * rate) : 0;
+  const amountKRW = typeof amountLocal === 'number' ? Math.round(amountLocal * effectiveRate) : 0;
 
   const self = journey?.selfParticipant ?? journey?.participants[0] ?? '나';
 
@@ -160,7 +175,7 @@ export function ExpenseForm({
     return Math.round(amountLocal / splitWith.length);
   }, [amountLocal, splitMode, splitWith, payer, self]);
 
-  const myShareKRW = Math.round(myShareLocal * rate);
+  const myShareKRW = Math.round(myShareLocal * effectiveRate);
   const participants = journey?.participants ?? [];
   const resolveParticipantId = (name: string): string => {
     const byName = journey?.participantIdsByName;
@@ -203,8 +218,8 @@ export function ExpenseForm({
       comment: comment.trim() || undefined,
       receiptImageUrl: undefined,
       fxMode: journey.rateMode === 'fixed' ? 'FIXED' : 'REALTIME',
-      fxRateTripToKrw: journey.rate,
-      amountKrw: Math.round(amountLocal * journey.rate),
+      fxRateTripToKrw: effectiveRate,
+      amountKrw: Math.round(amountLocal * effectiveRate),
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
     };
@@ -225,10 +240,7 @@ export function ExpenseForm({
           journeyId,
           ...receiptPatch,
         };
-        const saved = await updateMut.mutateAsync({
-          id: expenseId,
-          patch: patchPayload,
-        });
+        const saved = await updateMut.mutateAsync({ id: expenseId, patch: patchPayload });
         onSaved(saved);
       } else {
         const saved = await addMut.mutateAsync(payload);
@@ -254,11 +266,7 @@ export function ExpenseForm({
       <TopBar
         title={
           <span>
-            {mode === 'edit'
-              ? '지출 내역 수정'
-              : mode === 'ocr'
-                ? '영수증 확인'
-                : '지출 내역 추가'}
+            {mode === 'edit' ? '지출 내역 수정' : mode === 'ocr' ? '영수증 확인' : '지출 내역 추가'}
           </span>
         }
         onBack={onCanceled}
