@@ -6,6 +6,7 @@ import { TopBar } from '@/components/layout/TopBar';
 import { useAuth } from '@/features/auth/useAuth';
 import { useExpensesQuery } from '@/features/expenses/queries';
 import { useJourneyQuery } from '@/features/journeys/queries';
+import { loadBudget } from '@/features/journeys/storage';
 import { expenseMyShareLocal, sumMySpendKRW, sumMySpendLocal } from '@/features/settlement/calc';
 import { dateKeyOf, timeLabelOf } from '@/lib/datetime';
 import { formatKRW, formatLocal } from '@/lib/money';
@@ -23,7 +24,14 @@ export function JourneyTimelinePage() {
   const { journeyId } = useParams();
   const { user } = useAuth();
 
-  const { data: journey } = useJourneyQuery(journeyId);
+  const { data: journeyRaw } = useJourneyQuery(journeyId);
+  // API가 budgetKRW를 반환하지 않으므로 localStorage에서 보완
+  const journey = useMemo(() => {
+    if (!journeyRaw) return journeyRaw;
+    if (journeyRaw.budgetKRW != null) return journeyRaw;
+    const stored = loadBudget(journeyRaw.id);
+    return stored !== undefined ? { ...journeyRaw, budgetKRW: stored } : journeyRaw;
+  }, [journeyRaw]);
   const { data: expenses = [] } = useExpensesQuery(journeyId, user?.id, journey?.participantIdsByName);
 
   const grouped = useMemo(() => {
