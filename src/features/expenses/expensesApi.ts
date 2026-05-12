@@ -125,7 +125,18 @@ function fromApiExpense(raw: unknown, fallback: Expense): Expense {
     paidAt: typeof raw.spentAt === 'string' ? raw.spentAt : fallback.paidAt,
     payerParticipantId:
       typeof raw.payerParticipantId === 'string' ? raw.payerParticipantId : fallback.payerParticipantId,
-    payer: typeof raw.payerParticipantId === 'string' ? raw.payerParticipantId : fallback.payer,
+    // payer: payerName(우선) → payerParticipantId → fallback 순. payerParticipantId만 있으면
+    // 이름 역변환은 components 레이어(useExpensesQuery)에서 수행.
+    payer:
+      typeof raw.payerName === 'string' && raw.payerName.trim()
+        ? raw.payerName.trim()
+        : typeof raw.payerParticipantId === 'string'
+          ? raw.payerParticipantId
+          : fallback.payer,
+    // splitWith: 백엔드가 반환하면 사용, 없으면 fallback
+    splitWith: Array.isArray(raw.splitWith)
+      ? (raw.splitWith as unknown[]).filter((s): s is string => typeof s === 'string')
+      : fallback.splitWith,
     comment: typeof raw.note === 'string' ? raw.note : fallback.comment,
     fxMode: raw.fxMode === 'FIXED' || raw.fxMode === 'REALTIME' ? raw.fxMode : fallback.fxMode,
     fxRateTripToKrw:

@@ -41,7 +41,20 @@ export function JourneyTimelinePage() {
     }
     return j;
   }, [journeyRaw]);
-  const { data: expenses = [] } = useExpensesQuery(journeyId, user?.id);
+  const { data: expensesRaw = [] } = useExpensesQuery(journeyId, user?.id);
+
+  // payerParticipantId(UUID) → 이름 역변환 (백엔드가 payer를 UUID로 반환하는 경우 대응)
+  const expenses = useMemo(() => {
+    const idsByName = journey?.participantIdsByName;
+    if (!idsByName || !expensesRaw.length) return expensesRaw;
+    const idToName: Record<string, string> = {};
+    for (const [name, id] of Object.entries(idsByName)) idToName[id] = name;
+    return expensesRaw.map((e) => ({
+      ...e,
+      payer: idToName[e.payer] ?? e.payer,
+      splitWith: e.splitWith?.map((s) => idToName[s] ?? s) ?? e.splitWith,
+    }));
+  }, [expensesRaw, journey]);
 
   const grouped = useMemo(() => {
     const by: Record<string, typeof expenses> = {};
