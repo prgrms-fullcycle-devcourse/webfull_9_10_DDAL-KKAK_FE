@@ -10,11 +10,6 @@ const STATUS_FROM_API: Record<string, Journey['status']> = {
   ONGOING: 'active',
   COMPLETED: 'ended',
 };
-const STATUS_TO_API: Record<Journey['status'], string> = {
-  planned: 'PLANNING',
-  active: 'ONGOING',
-  ended: 'COMPLETED',
-};
 
 function normalizeJourney(raw: Journey): Journey {
   const r = raw as unknown as Record<string, unknown>;
@@ -23,14 +18,32 @@ function normalizeJourney(raw: Journey): Journey {
     (typeof r.name === 'string' && r.name) || (typeof r.title === 'string' && r.title) || '';
 
   const resolvedCurrency =
+    (typeof r.tripCurrencyCode === 'string' && r.tripCurrencyCode) ||
     (typeof r.currencyCode === 'string' && r.currencyCode) ||
     (typeof r.currency === 'string' && r.currency) ||
-    raw.currency ||
     'KRW';
+
+  const resolvedRate =
+    typeof r.fixedExchangeRate === 'number'
+      ? r.fixedExchangeRate
+      : typeof r.rate === 'number'
+        ? r.rate
+        : 1;
+
+  const rawFxMode = typeof r.defaultFxMode === 'string' ? r.defaultFxMode.toLowerCase() : '';
+  const resolvedRateMode: Journey['rateMode'] =
+    rawFxMode === 'fixed' || rawFxMode === 'realtime'
+      ? (rawFxMode as Journey['rateMode'])
+      : (raw.rateMode ?? 'fixed');
 
   const rawStatus = typeof r.status === 'string' ? r.status : '';
   const resolvedStatus: Journey['status'] =
     STATUS_FROM_API[rawStatus] ?? (raw.status as Journey['status']) ?? 'active';
+
+  const resolvedStartDate =
+    typeof r.startDate === 'string' ? r.startDate.slice(0, 10) : raw.startDate;
+  const resolvedEndDate = typeof r.endDate === 'string' ? r.endDate.slice(0, 10) : raw.endDate;
+
   const participantsRaw = r.participants as RawParticipant[] | undefined;
   const participants: string[] = [];
   const participantIdsByName: Record<string, string> = {};
@@ -53,7 +66,11 @@ function normalizeJourney(raw: Journey): Journey {
     ...raw,
     name: resolvedName || raw.name,
     currency: resolvedCurrency as Journey['currency'],
+    rate: resolvedRate,
+    rateMode: resolvedRateMode,
     status: resolvedStatus,
+    startDate: resolvedStartDate,
+    endDate: resolvedEndDate,
     ...(participants.length && { participants }),
     ...(Object.keys(participantIdsByName).length && { participantIdsByName }),
   };
@@ -63,20 +80,47 @@ function serializeTrip(input: Partial<Journey> & { name?: string }): Record<stri
   const payload: Record<string, unknown> = {};
 
   if (input.name !== undefined) payload.title = input.name;
-  if (input.country !== undefined) payload.country = input.country;
-  if (input.currency !== undefined) payload.currencyCode = input.currency;
-  if (input.rate !== undefined) payload.exchangeRate = input.rate;
-  if (input.rateMode !== undefined) payload.rateMode = input.rateMode;
+  payload.tripCurrencyCode = input.currency ?? 'KRW';
+  if (input.rateMode !== undefined) payload.defaultFxMode = input.rateMode.toUpperCase();
+  if (input.rate !== undefined) payload.fixedExchangeRate = input.rate;
   if (input.startDate !== undefined) payload.startDate = input.startDate;
   if (input.endDate !== undefined) payload.endDate = input.endDate;
-  if (input.budgetKRW !== undefined) payload.budgetKrw = input.budgetKRW;
-  if (input.status !== undefined) payload.status = STATUS_TO_API[input.status] ?? input.status;
-
-  if (input.participants !== undefined) {
-    payload.participants = input.participants.map((name) => ({ name }));
-  }
 
   return payload;
+}
+
+async function addParticipant(tripId: string, name: string): Promise<{ id: string; name: string }> {
+  return apiFetch(`/trips/${tripId}/participants`, {
+    method: 'POST',
+    body: JSON.stringify({ name }),
+  });
+}
+
+async function removeParticipant(tripId: string, participantId: string): Promise<void> {
+  await apiFetch(`/trips/${tripId}/participants/${participantId}`, { method: 'DELETE' });
+}
+
+/**
+ * 기존 참여자(existingIds)와 새 목록(nextNames)을 비교해 추가/삭제.
+ * 이름이 existingIds에 없으면 추가, nextNames에 없으면 삭제.
+ */
+async function syncParticipants(
+  tripId: string,
+  existingIds: Record<string, string>,
+  nextNames: string[],
+): Promise<Record<string, string>> {
+  const toDelete = Object.entries(existingIds).filter(([name]) => !nextNames.includes(name));
+  const toAdd = nextNames.filter((name) => !(name in existingIds));
+
+  await Promise.all(toDelete.map(([, id]) => removeParticipant(tripId, id)));
+
+  const added = await Promise.all(toAdd.map((name) => addParticipant(tripId, name)));
+
+  const next = { ...existingIds };
+  for (const [name] of toDelete) delete next[name];
+  for (const { id, name } of added) next[name] = id;
+
+  return next;
 }
 
 function isMockMode(): boolean {
@@ -130,7 +174,19 @@ export async function createTrip(input: CreateTripInput): Promise<Journey> {
       method: 'POST',
       body: JSON.stringify(serializeTrip(input)),
     });
-    return normalizeJourney(created);
+    const trip = normalizeJourney(created);
+
+    // 여행 생성 후 참여자 개별 등록 (실패해도 여행 생성은 성공으로 처리)
+    if (input.participants?.length) {
+      try {
+        const participantIdsByName = await syncParticipants(trip.id, {}, input.participants);
+        return { ...trip, participants: input.participants, participantIdsByName };
+      } catch {
+        return { ...trip, participants: input.participants };
+      }
+    }
+
+    return trip;
   } catch (e) {
     if (e instanceof ApiError && (e.status === 401 || e.status === 404 || e.status === 501)) {
       const id = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -154,7 +210,16 @@ export async function updateTrip(tripId: string, patch: Partial<Journey>): Promi
       method: 'PATCH',
       body: JSON.stringify(serializeTrip(patch)),
     });
-    return normalizeJourney(updated);
+    const trip = normalizeJourney(updated);
+
+    // 참여자 diff: 기존 ID 맵과 새 목록 비교
+    if (patch.participants !== undefined) {
+      const existingIds = patch.participantIdsByName ?? trip.participantIdsByName ?? {};
+      const participantIdsByName = await syncParticipants(tripId, existingIds, patch.participants);
+      return { ...trip, participants: patch.participants, participantIdsByName };
+    }
+
+    return trip;
   } catch (e) {
     if (e instanceof ApiError && (e.status === 401 || e.status === 404 || e.status === 501)) {
       const list = updateJourney(tripId, patch);

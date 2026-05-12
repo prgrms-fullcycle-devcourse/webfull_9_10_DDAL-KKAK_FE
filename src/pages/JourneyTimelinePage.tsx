@@ -24,7 +24,7 @@ export function JourneyTimelinePage() {
   const { user } = useAuth();
 
   const { data: journey } = useJourneyQuery(journeyId);
-  const { data: expenses = [] } = useExpensesQuery(journeyId, user?.id);
+  const { data: expenses = [] } = useExpensesQuery(journeyId, user?.id, journey?.participantIdsByName);
 
   const grouped = useMemo(() => {
     const by: Record<string, typeof expenses> = {};

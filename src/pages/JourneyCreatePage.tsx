@@ -168,6 +168,7 @@ export function JourneyCreatePage() {
           startDate: dates.start,
           endDate: dates.end,
           participants: plist,
+          participantIdsByName: existingJourney?.participantIdsByName ?? {},
           selfParticipant: selfN,
           budgetKRW: budgetValue,
         },
