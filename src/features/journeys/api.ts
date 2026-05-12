@@ -23,14 +23,32 @@ function normalizeJourney(raw: Journey): Journey {
     (typeof r.name === 'string' && r.name) || (typeof r.title === 'string' && r.title) || '';
 
   const resolvedCurrency =
+    (typeof r.tripCurrencyCode === 'string' && r.tripCurrencyCode) ||
     (typeof r.currencyCode === 'string' && r.currencyCode) ||
     (typeof r.currency === 'string' && r.currency) ||
-    raw.currency ||
     'KRW';
+
+  const resolvedRate =
+    typeof r.fixedExchangeRate === 'number'
+      ? r.fixedExchangeRate
+      : typeof r.rate === 'number'
+        ? r.rate
+        : 1;
+
+  const rawFxMode = typeof r.defaultFxMode === 'string' ? r.defaultFxMode.toLowerCase() : '';
+  const resolvedRateMode: Journey['rateMode'] =
+    rawFxMode === 'fixed' || rawFxMode === 'realtime'
+      ? (rawFxMode as Journey['rateMode'])
+      : (raw.rateMode ?? 'fixed');
 
   const rawStatus = typeof r.status === 'string' ? r.status : '';
   const resolvedStatus: Journey['status'] =
     STATUS_FROM_API[rawStatus] ?? (raw.status as Journey['status']) ?? 'active';
+
+  const resolvedStartDate =
+    typeof r.startDate === 'string' ? r.startDate.slice(0, 10) : raw.startDate;
+  const resolvedEndDate =
+    typeof r.endDate === 'string' ? r.endDate.slice(0, 10) : raw.endDate;
   const participantsRaw = r.participants as RawParticipant[] | undefined;
   const participants: string[] = [];
   const participantIdsByName: Record<string, string> = {};
@@ -53,7 +71,11 @@ function normalizeJourney(raw: Journey): Journey {
     ...raw,
     name: resolvedName || raw.name,
     currency: resolvedCurrency as Journey['currency'],
+    rate: resolvedRate,
+    rateMode: resolvedRateMode,
     status: resolvedStatus,
+    startDate: resolvedStartDate,
+    endDate: resolvedEndDate,
     ...(participants.length && { participants }),
     ...(Object.keys(participantIdsByName).length && { participantIdsByName }),
   };
