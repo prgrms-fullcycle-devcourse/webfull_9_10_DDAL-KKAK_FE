@@ -1,7 +1,14 @@
 import { apiFetch } from '@/lib/api';
 import type { Journey } from './types';
 import { ApiError } from '@/lib/api';
-import { addJourney, deleteJourney, loadJourneys, updateJourney } from './storage';
+import {
+  addJourney,
+  deleteJourney,
+  loadJourneys,
+  loadParticipantsCache,
+  saveParticipantsCache,
+  updateJourney,
+} from './storage';
 
 type RawParticipant = string | { id?: string; name?: string };
 
@@ -111,7 +118,8 @@ function normalizeJourney(raw: Journey): Journey {
     status: resolvedStatus,
     startDate: resolvedStartDate,
     endDate: resolvedEndDate,
-    ...(participants.length && { participants }),
+    // 항상 string[] 보장 — API가 participants 필드를 생략해도 빈 배열로 안전하게 초기화
+    participants,
     ...(Object.keys(participantIdsByName).length && { participantIdsByName }),
   };
 }
@@ -190,7 +198,19 @@ export async function fetchTrip(tripId: string): Promise<Journey> {
   }
   try {
     const trip = await apiFetch<Journey>(`/trips/${tripId}`);
-    return normalizeJourney(trip);
+    const normalized = normalizeJourney(trip);
+    // 백엔드가 participants를 비워서 반환하면 localStorage 캐시로 보완
+    if (!normalized.participants.length) {
+      const cached = loadParticipantsCache(tripId);
+      if (cached?.participants.length) {
+        return {
+          ...normalized,
+          participants: cached.participants,
+          participantIdsByName: cached.participantIdsByName,
+        };
+      }
+    }
+    return normalized;
   } catch (e) {
     if (e instanceof ApiError && (e.status === 401 || e.status === 404 || e.status === 501)) {
       const found = loadJourneys().find((j) => j.id === tripId);
@@ -221,8 +241,11 @@ export async function createTrip(input: CreateTripInput): Promise<Journey> {
     if (input.participants?.length) {
       try {
         const participantIdsByName = await syncParticipants(trip.id, {}, input.participants);
+        saveParticipantsCache(trip.id, input.participants, participantIdsByName);
         return { ...trip, participants: input.participants, participantIdsByName };
       } catch {
+        // 백엔드 API 실패해도 로컬 캐시에는 저장
+        saveParticipantsCache(trip.id, input.participants, {});
         return { ...trip, participants: input.participants };
       }
     }
@@ -262,8 +285,11 @@ export async function updateTrip(tripId: string, patch: Partial<Journey>): Promi
           existingIds,
           patch.participants,
         );
+        saveParticipantsCache(tripId, patch.participants, participantIdsByName);
         return { ...trip, participants: patch.participants, participantIdsByName };
       } catch {
+        // 백엔드 API 실패해도 로컬 캐시에는 저장
+        saveParticipantsCache(tripId, patch.participants, patch.participantIdsByName ?? {});
         return { ...trip, participants: patch.participants };
       }
     }

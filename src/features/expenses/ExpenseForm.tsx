@@ -12,6 +12,7 @@ import { ToastPortal } from '@/components/ui/Toast';
 import { useToast } from '@/components/ui/useToast';
 import { nowLocalIso, toStoredWallClock } from '@/lib/datetime';
 import { useAuth } from '@/features/auth/useAuth';
+import { demoRateForCurrency, getRealtimeRate } from '@/lib/currencyRates';
 
 type Mode = 'create' | 'edit' | 'ocr';
 
@@ -146,9 +147,23 @@ export function ExpenseForm({
     if (src.receiptId) setReceiptId(src.receiptId);
   }, [existing, initialDraft]);
 
+  // ── 실효 환율: fixed → journey.rate 고정, realtime → API에서 최신 환율 조회 ──
+  const [effectiveRate, setEffectiveRate] = useState<number>(journey?.rate ?? 1);
+
+  useEffect(() => {
+    if (!journey) return;
+    if (journey.rateMode === 'fixed' || journey.currency === 'KRW') {
+      setEffectiveRate(journey.rate);
+      return;
+    }
+    // realtime: 백엔드 환율 API 조회 → 실패 시 demo 값으로 폴백
+    getRealtimeRate(journey.currency, 'KRW')
+      .then(setEffectiveRate)
+      .catch(() => setEffectiveRate(demoRateForCurrency(journey.currency)));
+  }, [journey]);
+
   // ── 계산 ──
-  const rate = journey?.rate ?? 1;
-  const amountKRW = typeof amountLocal === 'number' ? Math.round(amountLocal * rate) : 0;
+  const amountKRW = typeof amountLocal === 'number' ? Math.round(amountLocal * effectiveRate) : 0;
 
   const self = journey?.selfParticipant ?? journey?.participants[0] ?? '나';
 
@@ -159,7 +174,7 @@ export function ExpenseForm({
     return Math.round(amountLocal / splitWith.length);
   }, [amountLocal, splitMode, splitWith, payer, self]);
 
-  const myShareKRW = Math.round(myShareLocal * rate);
+  const myShareKRW = Math.round(myShareLocal * effectiveRate);
   const participants = journey?.participants ?? [];
   const resolveParticipantId = (name: string): string => {
     const byName = journey?.participantIdsByName;
@@ -201,8 +216,8 @@ export function ExpenseForm({
       comment: comment.trim() || undefined,
       receiptImageUrl: undefined,
       fxMode: journey.rateMode === 'fixed' ? 'FIXED' : 'REALTIME',
-      fxRateTripToKrw: journey.rate,
-      amountKrw: Math.round(amountLocal * journey.rate),
+      fxRateTripToKrw: effectiveRate,
+      amountKrw: Math.round(amountLocal * effectiveRate),
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
     };

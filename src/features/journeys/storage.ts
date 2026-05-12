@@ -58,8 +58,9 @@ export function deleteJourney(id: string): Journey[] {
   const expenses = loadAllExpenses();
   saveAllExpenses(expenses.filter((e) => e.journeyId !== id));
 
-  // 예산 정보도 함께 삭제
+  // 예산·참여자 캐시도 함께 삭제
   deleteBudget(id);
+  deleteParticipantsCache(id);
 
   return next;
 }
@@ -98,4 +99,49 @@ export function saveBudget(tripId: string, budget: number | undefined): void {
 
 function deleteBudget(tripId: string): void {
   saveBudget(tripId, undefined);
+}
+
+// ─── 참여자 캐시 (백엔드 participants API 미배포 대비 → tripId 기준 localStorage 별도 저장) ───
+
+const PARTICIPANTS_KEY = 'tt_trip_participants_v1';
+
+type ParticipantsCache = {
+  participants: string[];
+  participantIdsByName: Record<string, string>;
+};
+
+function loadParticipantsMap(): Record<string, ParticipantsCache> {
+  try {
+    const raw = localStorage.getItem(PARTICIPANTS_KEY);
+    if (!raw) return {};
+    return JSON.parse(raw) as Record<string, ParticipantsCache>;
+  } catch {
+    return {};
+  }
+}
+
+/** 여행 ID로 저장된 참여자 목록 조회. 없으면 undefined. */
+export function loadParticipantsCache(tripId: string): ParticipantsCache | undefined {
+  return loadParticipantsMap()[tripId];
+}
+
+/** 참여자 목록 저장. participants가 비어 있으면 삭제. */
+export function saveParticipantsCache(
+  tripId: string,
+  participants: string[],
+  participantIdsByName: Record<string, string>,
+): void {
+  const map = loadParticipantsMap();
+  if (participants.length > 0) {
+    map[tripId] = { participants, participantIdsByName };
+  } else {
+    delete map[tripId];
+  }
+  localStorage.setItem(PARTICIPANTS_KEY, JSON.stringify(map));
+}
+
+function deleteParticipantsCache(tripId: string): void {
+  const map = loadParticipantsMap();
+  delete map[tripId];
+  localStorage.setItem(PARTICIPANTS_KEY, JSON.stringify(map));
 }
