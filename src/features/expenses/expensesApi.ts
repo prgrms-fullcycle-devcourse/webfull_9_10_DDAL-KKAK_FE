@@ -99,13 +99,9 @@ function toExpensePayload(
   } else if ('payer' in expense && expense.payer !== undefined) {
     payload.payerParticipantId = expense.payer;
   }
-  if (fxRate !== undefined) payload.fxRateTripToKrw = fxRate;
-  if (amountKrw !== undefined) payload.amountKrw = amountKrw;
+  payload.fxRateTripToKrw = fxRate ?? 1;
+  payload.amountKrw = amountKrw ?? amountOriginal ?? 0;
   if ('fxMode' in expense && expense.fxMode !== undefined) payload.fxMode = expense.fxMode;
-  if ('splitMode' in expense && expense.splitMode !== undefined) payload.splitMode = expense.splitMode;
-  if ('splitWith' in expense && expense.splitWith !== undefined) payload.splitWith = expense.splitWith;
-  if ('method' in expense && expense.method !== undefined) payload.method = expense.method;
-  if ('emoji' in expense && expense.emoji !== undefined) payload.emoji = expense.emoji;
   if ('category' in expense && expense.category !== undefined) payload.category = expense.category;
   return payload;
 }
