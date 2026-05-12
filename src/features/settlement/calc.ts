@@ -34,10 +34,18 @@ export function sumMySpendLocal(journey: Journey, expenses: Expense[]) {
   return expenses.reduce((acc, e) => acc + expenseMyShareLocal(journey, e), 0);
 }
 export function sumMySpendKRW(journey: Journey, expenses: Expense[]) {
-  return sumMySpendLocal(journey, expenses) * journey.rate;
+  return expenses.reduce((acc, e) => {
+    const myShareLocal = expenseMyShareLocal(journey, e);
+    if (myShareLocal === 0) return acc;
+    const rate = e.fxRateTripToKrw ?? journey.rate;
+    return acc + Math.round(myShareLocal * rate);
+  }, 0);
 }
 export function sumTotalKRW(journey: Journey, expenses: Expense[]) {
-  return expenses.reduce((acc, e) => acc + e.amountLocal * journey.rate, 0);
+  return expenses.reduce((acc, e) => {
+    const rate = e.fxRateTripToKrw ?? journey.rate;
+    return acc + (e.amountKrw ?? Math.round(e.amountLocal * rate));
+  }, 0);
 }
 export function sumTotalLocal(expenses: Expense[]) {
   return expenses.reduce((acc, e) => acc + e.amountLocal, 0);

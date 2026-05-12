@@ -330,13 +330,13 @@ export function JourneyTimelinePage() {
                               <span className="ml-0.5 text-xs font-bold">{journey.currency}</span>
                             </p>
                             <p className="mt-1 text-[10px] font-bold tracking-tighter text-slate-300">
-                              약 {formatKRW(e.amountLocal * journey.rate)}원
+                              약 {formatKRW(e.amountKrw ?? Math.round(e.amountLocal * (e.fxRateTripToKrw ?? journey.rate)))}원
                             </p>
                             {isShared ? (
                               <p className="mt-1 text-[10px] font-bold tracking-tighter text-blue-500">
                                 🏷️ {formatLocal(myShare)} {journey.currency}
                                 <span className="ml-1 text-slate-400">
-                                  (약 {formatKRW(myShare * journey.rate)}원)
+                                  (약 {formatKRW(Math.round(myShare * (e.fxRateTripToKrw ?? journey.rate)))}원)
                                 </span>
                               </p>
                             ) : null}
