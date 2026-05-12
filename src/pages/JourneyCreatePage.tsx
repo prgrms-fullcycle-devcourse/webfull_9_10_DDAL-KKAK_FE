@@ -9,6 +9,7 @@ import {
   useJourneyQuery,
   useUpdateJourneyMutation,
 } from '@/features/journeys/queries';
+import { loadBudget, saveBudget } from '@/features/journeys/storage';
 import { demoRateForCurrency, getRealtimeRate } from '@/lib/currencyRates';
 import { useAuth } from '@/features/auth/useAuth';
 
@@ -86,11 +87,12 @@ export function JourneyCreatePage() {
     );
     setDates({ start: existingJourney.startDate, end: existingJourney.endDate });
     setParticipants(existingJourney.participants.length ? existingJourney.participants : [authName || '나']);
-    setBudgetKRW(
-      typeof existingJourney.budgetKRW === 'number' && existingJourney.budgetKRW > 0
+    // mock 모드: Journey 객체에 budgetKRW 포함 / API 모드: localStorage 별도 저장값 사용
+    const storedBudget =
+      (typeof existingJourney.budgetKRW === 'number' && existingJourney.budgetKRW > 0
         ? existingJourney.budgetKRW
-        : '',
-    );
+        : undefined) ?? loadBudget(existingJourney.id);
+    setBudgetKRW(storedBudget ?? '');
     setHydratedFromId(existingJourney.id);
   }, [isEdit, existingJourney, hydratedFromId, authName]);
 
@@ -173,6 +175,8 @@ export function JourneyCreatePage() {
           budgetKRW: budgetValue,
         },
       });
+      // API가 budgetKRW를 저장하지 않으므로 localStorage에 별도 보관
+      saveBudget(journeyId, budgetValue);
       nav(`/journeys/${journeyId}`, { replace: true });
       return;
     }
@@ -190,6 +194,8 @@ export function JourneyCreatePage() {
       selfParticipant: selfN,
       budgetKRW: budgetValue,
     });
+    // API가 budgetKRW를 저장하지 않으므로 localStorage에 별도 보관
+    saveBudget(newJourney.id, budgetValue);
     nav(`/journeys/${newJourney.id}`);
   };
   async function handleDelete() {
