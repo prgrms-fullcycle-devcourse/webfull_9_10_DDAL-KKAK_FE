@@ -1,16 +1,20 @@
 import { useQuery } from '@tanstack/react-query';
 import { loadAllExpenses } from '@/features/expenses/storage';
+import { isMockMode } from '@/features/journeys/api';
 import { loadJourneys } from '@/features/journeys/storage';
-import { fetchSettlement, fetchSettlementSummary, type SettlementData, type SettlementSummaryData } from './api';
+import { ApiError } from '@/lib/api';
+import {
+  fetchSettlement,
+  fetchSettlementSummary,
+  type SettlementData,
+  type SettlementSummaryData,
+} from './api';
 import { calcSettlement, ledgerSelfName, sumMySpendLocal, sumMySpendKRW } from './calc';
 
 /**
- * 토큰 있으면 백엔드 정산 API, 없으면 localStorage 기반 로컬 계산.
- * 데모 모드(데모 사용자 진입)에서도 결산표가 정상 동작하도록.
+ * 여행 API(`journeys/api`)와 동일한 기준: mock·비로그인 → 로컬 계산, 그 외 → 백엔드.
+ * (토큰만 보고 API를 호출하면 VITE_USE_MOCK + 토큰 조합에서 여행은 로컬·정산만 API로 갈라짐)
  */
-function hasBackendAuth(): boolean {
-  return !!localStorage.getItem('tt_access_token_v1');
-}
 
 /**
  * 로컬 calcSettlement 결과 → 백엔드 SettlementData 스키마로 변환.
@@ -71,9 +75,18 @@ export function useSettlementQuery(tripId: string | undefined) {
     queryKey: ['settlement', tripId],
     enabled: !!tripId,
     queryFn: async (): Promise<SettlementData> => {
-      if (hasBackendAuth()) return fetchSettlement(tripId!);
-      await new Promise((r) => setTimeout(r, 100));
-      return buildLocalSettlement(tripId!);
+      if (isMockMode()) {
+        await new Promise((r) => setTimeout(r, 100));
+        return buildLocalSettlement(tripId!);
+      }
+      try {
+        return await fetchSettlement(tripId!);
+      } catch (e) {
+        if (e instanceof ApiError && (e.status === 404 || e.status === 501)) {
+          return buildLocalSettlement(tripId!);
+        }
+        throw e;
+      }
     },
   });
 }
@@ -89,7 +102,8 @@ function buildLocalSettlementSummary(tripId: string): SettlementSummaryData {
   const me = ledgerSelfName(journey);
   const mySpentLocal = sumMySpendLocal(journey, expenses);
   const mySpentKrw = Math.round(sumMySpendKRW(journey, expenses));
-  const netLocal = calcSettlement(journey, expenses).nets.find((n) => n.person === me)?.netLocal ?? 0;
+  const netLocal =
+    calcSettlement(journey, expenses).nets.find((n) => n.person === me)?.netLocal ?? 0;
   const netAmountKrw = Math.round(netLocal * journey.rate);
 
   return {
@@ -109,9 +123,18 @@ export function useSettlementSummaryQuery(tripId: string | undefined) {
     queryKey: ['settlementSummary', tripId],
     enabled: !!tripId,
     queryFn: async (): Promise<SettlementSummaryData> => {
-      if (hasBackendAuth()) return fetchSettlementSummary(tripId!);
-      await new Promise((r) => setTimeout(r, 80));
-      return buildLocalSettlementSummary(tripId!);
+      if (isMockMode()) {
+        await new Promise((r) => setTimeout(r, 80));
+        return buildLocalSettlementSummary(tripId!);
+      }
+      try {
+        return await fetchSettlementSummary(tripId!);
+      } catch (e) {
+        if (e instanceof ApiError && (e.status === 404 || e.status === 501)) {
+          return buildLocalSettlementSummary(tripId!);
+        }
+        throw e;
+      }
     },
   });
 }

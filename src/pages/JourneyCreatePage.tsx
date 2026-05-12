@@ -85,14 +85,14 @@ export function JourneyCreatePage() {
         : demoRateForCurrency(existingJourney.currency),
     );
     setDates({ start: existingJourney.startDate, end: existingJourney.endDate });
-    setParticipants(existingJourney.participants.length ? existingJourney.participants : ['나']);
+    setParticipants(existingJourney.participants.length ? existingJourney.participants : [authName || '나']);
     setBudgetKRW(
       typeof existingJourney.budgetKRW === 'number' && existingJourney.budgetKRW > 0
         ? existingJourney.budgetKRW
         : '',
     );
     setHydratedFromId(existingJourney.id);
-  }, [isEdit, existingJourney, hydratedFromId]);
+  }, [isEdit, existingJourney, hydratedFromId, authName]);
 
   // 신규 생성에서만 로그인 사용자명을 참가자 1번으로 prepend.
   // 수정 모드에서는 기존 participants/selfParticipant를 보존해야
