@@ -1,4 +1,5 @@
 import { ArrowRight, Check, ChevronRight, Coins, ImageDown, Sparkles, Users } from 'lucide-react';
+import html2canvas from 'html2canvas';
 import { useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { TopBar } from '@/components/layout/TopBar';
@@ -11,7 +12,12 @@ export function ReportPage() {
   const nav = useNavigate();
   const { journeyId } = useParams();
   const { data: journey } = useJourneyQuery(journeyId);
-  const { data: settlement, isPending: settlementPending, isError: settlementError, error: settlementErrorObj } = useSettlementQuery(journeyId);
+  const {
+    data: settlement,
+    isPending: settlementPending,
+    isError: settlementError,
+    error: settlementErrorObj,
+  } = useSettlementQuery(journeyId);
   const reportRef = useRef<HTMLDivElement | null>(null);
   const [isCapturing, setIsCapturing] = useState(false);
   const updateJourneyMut = useUpdateJourneyMutation();
@@ -117,23 +123,53 @@ export function ReportPage() {
   };
 
   const handleCapture = async () => {
-    if (!reportRef.current) return;
+    const root = reportRef.current;
+    if (!root) return;
     setIsCapturing(true);
-    try {
-      const res = await fetch('/__screenshot/report', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ journeyId: journey.id }),
-      });
-      if (!res.ok) {
-        const msg = await res.text().catch(() => '');
-        throw new Error(msg || `HTTP ${res.status}`);
+    const filename = `travel-tick-report-${journey.id}.png`;
+
+    const tryPlaywrightServer = async (): Promise<boolean> => {
+      try {
+        const res = await fetch('/__screenshot/report', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ journeyId: journey.id }),
+        });
+        if (!res.ok) return false;
+        const ct = res.headers.get('Content-Type') || '';
+        if (!ct.includes('image/png')) return false;
+        const blob = await res.blob();
+        downloadBlob(blob, filename);
+        return true;
+      } catch {
+        return false;
       }
-      const blob = await res.blob();
-      downloadBlob(blob, `travel-tick-report-${journey.id}.png`);
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : '이미지 저장 중 오류가 발생했어요.';
-      alert(msg);
+    };
+
+    const tryClientCapture = async (): Promise<void> => {
+      const canvas = await html2canvas(root, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: '#ffffff',
+        logging: false,
+      });
+      await new Promise<void>((resolve, reject) => {
+        canvas.toBlob((blob) => {
+          if (blob) {
+            downloadBlob(blob, filename);
+            resolve();
+          } else reject(new Error('PNG 변환에 실패했어요.'));
+        }, 'image/png');
+      });
+    };
+
+    try {
+      const ok = await tryPlaywrightServer();
+      if (!ok) await tryClientCapture();
+    } catch {
+      alert(
+        '이미지를 저장하지 못했어요. 고화질 캡처는 터미널에서 `npm run dev:screenshot-server`를 띄운 뒤 다시 시도해 주세요.',
+      );
     } finally {
       setIsCapturing(false);
     }
@@ -321,60 +357,62 @@ export function ReportPage() {
               </p>
             ) : (
               <div className="space-y-2">
-                {perPerson.map(({ participantId, person, paidLocal, paidKRW, netLocal, netKRW }) => {
-                  const isMe = person === selfName;
-                  const tone: 'credit' | 'debit' | 'none' =
-                    netKRW > 0 ? 'credit' : netKRW < 0 ? 'debit' : 'none';
-                  const netLabel =
-                    tone === 'credit'
-                      ? `+${formatKRW(Math.round(netKRW))}원 받을 돈`
-                      : tone === 'debit'
-                        ? `-${formatKRW(Math.abs(Math.round(netKRW)))}원 보낼 돈`
-                        : '정산 완료';
-                  const netColor =
-                    tone === 'credit'
-                      ? 'text-blue-600'
-                      : tone === 'debit'
-                        ? 'text-[#FF4D4D]'
-                        : 'text-slate-400';
-                  return (
-                    <div
-                      key={participantId}
-                      className="flex items-center justify-between gap-3 rounded-2xl border border-slate-100 bg-white px-4 py-3"
-                    >
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-1.5">
-                          <span className="truncate text-sm font-black tracking-tight text-slate-900">
-                            {person}
-                          </span>
-                          {isMe ? (
-                            <span className="rounded bg-blue-100 px-1.5 py-0.5 text-[8px] font-black tracking-tighter text-blue-600">
-                              나
+                {perPerson.map(
+                  ({ participantId, person, paidLocal, paidKRW, netLocal, netKRW }) => {
+                    const isMe = person === selfName;
+                    const tone: 'credit' | 'debit' | 'none' =
+                      netKRW > 0 ? 'credit' : netKRW < 0 ? 'debit' : 'none';
+                    const netLabel =
+                      tone === 'credit'
+                        ? `+${formatKRW(Math.round(netKRW))}원 받을 돈`
+                        : tone === 'debit'
+                          ? `-${formatKRW(Math.abs(Math.round(netKRW)))}원 보낼 돈`
+                          : '정산 완료';
+                    const netColor =
+                      tone === 'credit'
+                        ? 'text-blue-600'
+                        : tone === 'debit'
+                          ? 'text-[#FF4D4D]'
+                          : 'text-slate-400';
+                    return (
+                      <div
+                        key={participantId}
+                        className="flex items-center justify-between gap-3 rounded-2xl border border-slate-100 bg-white px-4 py-3"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-1.5">
+                            <span className="truncate text-sm font-black tracking-tight text-slate-900">
+                              {person}
                             </span>
+                            {isMe ? (
+                              <span className="rounded bg-blue-100 px-1.5 py-0.5 text-[8px] font-black tracking-tighter text-blue-600">
+                                나
+                              </span>
+                            ) : null}
+                          </div>
+                          <p className="mt-1 text-[10px] font-bold text-slate-400">
+                            결제 {formatKRW(Math.round(paidKRW))}원
+                            {paidLocal != null && journey.currency !== 'KRW' ? (
+                              <span className="ml-1 text-slate-300">
+                                ({formatLocal(paidLocal)} {journey.currency})
+                              </span>
+                            ) : null}
+                          </p>
+                        </div>
+                        <div className="shrink-0 whitespace-nowrap text-right">
+                          <p className={`text-xs font-black tracking-tight ${netColor}`}>
+                            {netLabel}
+                          </p>
+                          {tone !== 'none' && netLocal != null && journey.currency !== 'KRW' ? (
+                            <p className="mt-0.5 text-[10px] font-bold text-slate-300">
+                              ({formatLocal(Math.abs(netLocal))} {journey.currency})
+                            </p>
                           ) : null}
                         </div>
-                        <p className="mt-1 text-[10px] font-bold text-slate-400">
-                          결제 {formatKRW(Math.round(paidKRW))}원
-                          {paidLocal != null && journey.currency !== 'KRW' ? (
-                            <span className="ml-1 text-slate-300">
-                              ({formatLocal(paidLocal)} {journey.currency})
-                            </span>
-                          ) : null}
-                        </p>
                       </div>
-                      <div className="shrink-0 whitespace-nowrap text-right">
-                        <p className={`text-xs font-black tracking-tight ${netColor}`}>
-                          {netLabel}
-                        </p>
-                        {tone !== 'none' && netLocal != null && journey.currency !== 'KRW' ? (
-                          <p className="mt-0.5 text-[10px] font-bold text-slate-300">
-                            ({formatLocal(Math.abs(netLocal))} {journey.currency})
-                          </p>
-                        ) : null}
-                      </div>
-                    </div>
-                  );
-                })}
+                    );
+                  },
+                )}
               </div>
             )}
           </section>
@@ -409,10 +447,7 @@ export function ReportPage() {
                   {rateInfo.detail}
                 </p>
               ) : null}
-              <p
-                data-tt-wrap
-                className="mt-2 text-[10px] font-bold leading-relaxed text-slate-400"
-              >
+              <p data-tt-wrap className="mt-2 text-[10px] font-bold leading-relaxed text-slate-400">
                 {journey.rateMode === 'fixed'
                   ? '여행 생성 시 입력한 환율로 모든 영수증을 환산합니다.'
                   : '환율 API 연동 전, 화면 표시용 데모 기준 환율입니다.'}

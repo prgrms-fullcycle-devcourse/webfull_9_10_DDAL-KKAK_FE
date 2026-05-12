@@ -1,15 +1,39 @@
 /**
  * API base URL (환경변수에서 로드).
- * dev: Vite proxy가 /auth, /api 경로를 이 URL로 포워딩 (vite.config.ts 참조).
- * 배포: 실제 백엔드 도메인. CORS 설정 필요.
+ * dev: apiFetch는 Vite 프록시(상대 경로)로 CORS 없이 호출. OAuth 시작 URL만 예외적으로 절대 URL 사용(oauthStartUrl).
+ * 배포: 실제 백엔드 도메인.
  */
 export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
 
 const TOKEN_KEY = 'tt_access_token_v1';
 
-/** OAuth 시작 URL — provider 페이지로 리다이렉트하는 백엔드 엔드포인트 */
+function buildUrl(path: string): string {
+  if (path.startsWith('http')) return path;
+  // dev(localhost)에서는 Vite proxy를 타서 CORS 없이 호출 (vite.config.ts 참고)
+  if (import.meta.env.DEV) return path;
+  return `${API_BASE_URL}${path}`;
+}
+
+function apiOriginForFullPageNavigation(): string | null {
+  const base = API_BASE_URL.replace(/\/$/, '');
+  return base.length ? base : null;
+}
+
+/**
+ * OAuth 시작 URL — 브라우저 전체 이동(window.location)용.
+ *
+ * dev에서 Vite 프록시로만 `/auth/.../login`을 열면 CSRF 쿠키가 localhost에만 심기고,
+ * 카카오 콜백은 보통 백엔드 호스트(예: onrender.com)로 들어와 쿠키가 안 붙어 CSRF_ERROR가 난다.
+ * 그래서 `VITE_API_BASE_URL`이 있으면 dev에서도 백엔드 절대 URL로 OAuth를 시작한다.
+ * (apiFetch는 그대로 상대 경로 + 프록시로 CORS 없이 호출)
+ */
 export function oauthStartUrl(provider: 'kakao' | 'google'): string {
-  return `${API_BASE_URL}/auth/${provider}/login`;
+  const path = `/auth/${provider}/login`;
+  if (import.meta.env.DEV) {
+    const origin = apiOriginForFullPageNavigation();
+    if (origin) return `${origin}${path}`;
+  }
+  return buildUrl(path);
 }
 
 /**
@@ -63,16 +87,26 @@ async function refreshAccessToken(): Promise<string | null> {
   if (refreshInflight) return refreshInflight;
   refreshInflight = (async () => {
     try {
-      const res = await fetch(`${API_BASE_URL}/auth/refresh`, {
+      const res = await fetch(buildUrl('/auth/refresh'), {
         method: 'POST',
         credentials: 'include', // refreshToken httpOnly cookie 자동 전달
       });
       if (!res.ok) {
         // 401 (EXPIRED / INVALID / MISSING / TOKEN_REUSE_DETECTED / REFRESH_TOKEN_NOT_FOUND)
-        // 모두 재로그인 필요한 상황이라 auth 클리어.
-        localStorage.removeItem(TOKEN_KEY);
-        localStorage.removeItem('tt_auth_v2');
-        window.dispatchEvent(new CustomEvent('auth:cleared'));
+        // 대부분은 재로그인 필요한 상황이라 auth 클리어.
+        //
+        // 단, 로컬(dev/preview)에서 "배포 백엔드 + accessToken 쿼리 주입"으로 테스트할 때는
+        // refreshToken 쿠키가 도메인 문제로 전달되지 않아 refresh가 항상 실패할 수 있다.
+        // 이 경우까지 강제로 로그아웃시키면 로컬에서 배포 플로우를 재현하기가 어려워서,
+        // localhost에서는 auth 상태를 유지하고 401을 그대로 전파한다.
+        const isLocalhost =
+          typeof window !== 'undefined' &&
+          (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+        if (!isLocalhost) {
+          localStorage.removeItem(TOKEN_KEY);
+          localStorage.removeItem('tt_auth_v2');
+          window.dispatchEvent(new CustomEvent('auth:cleared'));
+        }
         return null;
       }
       const body = (await res.json()) as ApiEnvelope<RefreshData>;
@@ -97,7 +131,7 @@ async function refreshAccessToken(): Promise<string | null> {
  * - 응답이 백엔드 envelope 형식이면 data만 추출, 아니면 그대로 반환.
  */
 export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
-  const url = path.startsWith('http') ? path : `${API_BASE_URL}${path}`;
+  const url = buildUrl(path);
 
   const send = async (token: string | null) => {
     return fetch(url, {

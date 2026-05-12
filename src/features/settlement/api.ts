@@ -274,6 +274,9 @@ export async function fetchSettlement(tripId: string): Promise<SettlementData> {
 /**
  * 나의 정산 요약 조회 (메인 카드/대시보드용)
  * 경로: GET /trips/{tripId}/settlement/summary
+ *
+ * 404·501은 `useSettlementSummaryQuery`에서 로컬 계산으로 폴백한다.
+ * (여기서 `GET /settlement`를 한 번 더 부르면 콘솔에 404가 두 번 찍힌다.)
  */
 export async function fetchSettlementSummary(tripId: string): Promise<SettlementSummaryData> {
   const raw = await apiFetch<unknown>(`/trips/${tripId}/settlement/summary`);
