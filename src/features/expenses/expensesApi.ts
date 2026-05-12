@@ -136,6 +136,7 @@ function fromApiExpense(raw: unknown, fallback: Expense): Expense {
       typeof raw.payerParticipantId === 'string' ? raw.payerParticipantId : fallback.payerParticipantId,
     payer: typeof raw.payerParticipantId === 'string' ? raw.payerParticipantId : fallback.payer,
     comment: typeof raw.note === 'string' ? raw.note : fallback.comment,
+    category: typeof raw.category === 'string' ? raw.category : fallback.category,
     fxMode: raw.fxMode === 'FIXED' || raw.fxMode === 'REALTIME' ? raw.fxMode : fallback.fxMode,
     fxRateTripToKrw:
       typeof raw.fxRateTripToKrw === 'number'
