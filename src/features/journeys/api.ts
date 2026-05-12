@@ -28,19 +28,25 @@ function normalizeJourney(raw: Journey): Journey {
     ...raw,
     participants: participants.length ? participants : raw.participants,
     participantIdsByName:
-      Object.keys(participantIdsByName).length > 0 ? participantIdsByName : raw.participantIdsByName,
+      Object.keys(participantIdsByName).length > 0
+        ? participantIdsByName
+        : raw.participantIdsByName,
   };
 }
 
-function useMockTrips(): boolean {
+function shouldUseMockTrips(): boolean {
   // 개발 단계에선 "백엔드 인증 토큰이 없으면" trips API를 치지 않고
   // 로컬스토리지(mock)로 동작하게 해서 401로 화면이 막히지 않게 한다.
   const hasToken = !!localStorage.getItem('tt_access_token_v1');
   return import.meta.env.DEV || import.meta.env.VITE_USE_MOCK === 'true' || !hasToken;
 }
 
+export function isMockMode(): boolean {
+  return shouldUseMockTrips();
+}
+
 export async function fetchTrips(): Promise<Journey[]> {
-  if (useMockTrips()) return loadJourneys();
+  if (shouldUseMockTrips()) return loadJourneys();
   try {
     const list = await apiFetch<Journey[]>('/trips');
     return list.map(normalizeJourney);
@@ -54,7 +60,7 @@ export async function fetchTrips(): Promise<Journey[]> {
 }
 
 export async function fetchTrip(tripId: string): Promise<Journey> {
-  if (useMockTrips()) {
+  if (shouldUseMockTrips()) {
     const found = loadJourneys().find((j) => j.id === tripId);
     if (!found) throw new Error('여정을 찾을 수 없어요.');
     return found;
@@ -75,7 +81,7 @@ export async function fetchTrip(tripId: string): Promise<Journey> {
 export type CreateTripInput = Omit<Journey, 'id'>;
 
 export async function createTrip(input: CreateTripInput): Promise<Journey> {
-  if (useMockTrips()) {
+  if (shouldUseMockTrips()) {
     const id = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
     const next: Journey = { ...input, id };
     addJourney(next);
@@ -99,7 +105,7 @@ export async function createTrip(input: CreateTripInput): Promise<Journey> {
 }
 
 export async function updateTrip(tripId: string, patch: Partial<Journey>): Promise<Journey> {
-  if (useMockTrips()) {
+  if (shouldUseMockTrips()) {
     const list = updateJourney(tripId, patch);
     const updated = list.find((j) => j.id === tripId);
     if (!updated) throw new Error('여정을 찾을 수 없어요.');
@@ -123,7 +129,7 @@ export async function updateTrip(tripId: string, patch: Partial<Journey>): Promi
 }
 
 export async function deleteTrip(tripId: string): Promise<void> {
-  if (useMockTrips()) {
+  if (shouldUseMockTrips()) {
     deleteJourney(tripId);
     return;
   }
