@@ -85,18 +85,11 @@ function serializeTrip(input: Partial<Journey> & { name?: string }): Record<stri
   const payload: Record<string, unknown> = {};
 
   if (input.name !== undefined) payload.title = input.name;
-  if (input.country !== undefined) payload.country = input.country;
   payload.tripCurrencyCode = input.currency ?? 'KRW';
-  if (input.rate !== undefined) payload.fixedExchangeRate = input.rate;
   if (input.rateMode !== undefined) payload.defaultFxMode = input.rateMode.toUpperCase();
+  if (input.rate !== undefined) payload.fixedExchangeRate = input.rate;
   if (input.startDate !== undefined) payload.startDate = input.startDate;
   if (input.endDate !== undefined) payload.endDate = input.endDate;
-  if (input.budgetKRW !== undefined) payload.budgetKrw = input.budgetKRW;
-  if (input.status !== undefined) payload.status = STATUS_TO_API[input.status] ?? input.status;
-
-  if (input.participants !== undefined) {
-    payload.participants = input.participants.map((name) => ({ name }));
-  }
 
   return payload;
 }
