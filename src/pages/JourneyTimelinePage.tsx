@@ -9,6 +9,7 @@ import { useJourneyQuery } from '@/features/journeys/queries';
 import { loadBudget } from '@/features/journeys/storage';
 import { expenseMyShareLocal, sumMySpendKRW, sumMySpendLocal } from '@/features/settlement/calc';
 import { dateKeyOf, timeLabelOf } from '@/lib/datetime';
+import { demoRateForCurrency } from '@/lib/currencyRates';
 import { formatKRW, formatLocal } from '@/lib/money';
 
 /** 'YYYY-MM-DD' wall-clock 기준 일차 계산 (1일차부터). */
@@ -25,14 +26,35 @@ export function JourneyTimelinePage() {
   const { user } = useAuth();
 
   const { data: journeyRaw } = useJourneyQuery(journeyId);
-  // API가 budgetKRW를 반환하지 않으므로 localStorage에서 보완
+  // API가 budgetKRW / fixedExchangeRate를 반환하지 않으므로 localStorage·demo 값으로 보완
   const journey = useMemo(() => {
     if (!journeyRaw) return journeyRaw;
-    if (journeyRaw.budgetKRW != null) return journeyRaw;
-    const stored = loadBudget(journeyRaw.id);
-    return stored !== undefined ? { ...journeyRaw, budgetKRW: stored } : journeyRaw;
+    let j = journeyRaw;
+    // 환율: 백엔드가 rate=1로 내려오면 demo 기준값으로 보완
+    if (j.rate === 1 && j.currency !== 'KRW') {
+      j = { ...j, rate: demoRateForCurrency(j.currency) };
+    }
+    // 예산
+    if (j.budgetKRW == null) {
+      const stored = loadBudget(j.id);
+      if (stored !== undefined) j = { ...j, budgetKRW: stored };
+    }
+    return j;
   }, [journeyRaw]);
-  const { data: expenses = [] } = useExpensesQuery(journeyId, user?.id);
+  const { data: expensesRaw = [] } = useExpensesQuery(journeyId, user?.id);
+
+  // payerParticipantId(UUID) → 이름 역변환 (백엔드가 payer를 UUID로 반환하는 경우 대응)
+  const expenses = useMemo(() => {
+    const idsByName = journey?.participantIdsByName;
+    if (!idsByName || !expensesRaw.length) return expensesRaw;
+    const idToName: Record<string, string> = {};
+    for (const [name, id] of Object.entries(idsByName)) idToName[id] = name;
+    return expensesRaw.map((e) => ({
+      ...e,
+      payer: idToName[e.payer] ?? e.payer,
+      splitWith: e.splitWith?.map((s) => idToName[s] ?? s) ?? e.splitWith,
+    }));
+  }, [expensesRaw, journey]);
 
   const grouped = useMemo(() => {
     const by: Record<string, typeof expenses> = {};
@@ -338,7 +360,7 @@ export function JourneyTimelinePage() {
                               <span className="ml-0.5 text-xs font-bold">{journey.currency}</span>
                             </p>
                             <p className="mt-1 text-[10px] font-bold tracking-tighter text-slate-300">
-                              약 {formatKRW(e.amountKrw ?? Math.round(e.amountLocal * (e.fxRateTripToKrw ?? journey.rate)))}원
+                              약 {formatKRW(Math.round(e.amountLocal * (e.fxRateTripToKrw ?? journey.rate)))}원
                             </p>
                             {isShared ? (
                               <p className="mt-1 text-[10px] font-bold tracking-tighter text-blue-500">
