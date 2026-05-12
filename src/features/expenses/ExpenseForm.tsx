@@ -12,6 +12,7 @@ import { ToastPortal } from '@/components/ui/Toast';
 import { useToast } from '@/components/ui/useToast';
 import { nowLocalIso, toStoredWallClock } from '@/lib/datetime';
 import { useAuth } from '@/features/auth/useAuth';
+import { getExpenseErrorMessage } from '@/features/expenses/expensesApi';
 
 type Mode = 'create' | 'edit' | 'ocr';
 
@@ -187,6 +188,7 @@ export function ExpenseForm({
     const payload: Expense = {
       id: expenseId ?? crypto.randomUUID(),
       journeyId,
+      receiptId: receiptId.trim() || undefined,
       emoji,
       storeName: storeName.trim() || '(이름 없음)',
       category: '기타',
@@ -207,12 +209,33 @@ export function ExpenseForm({
       updatedAt: now,
     };
 
-    if (mode === 'edit' && expenseId) {
-      const saved = await updateMut.mutateAsync({ id: expenseId, patch: payload });
-      onSaved(saved);
-    } else {
-      const saved = await addMut.mutateAsync(payload);
-      onSaved(saved);
+    try {
+      if (mode === 'edit' && expenseId) {
+        const initialReceiptId = existing?.receiptId?.trim() ?? '';
+        const nextReceiptId = receiptId.trim();
+        let receiptPatch: { receiptId?: string | null } = {};
+        if (nextReceiptId !== initialReceiptId) {
+          receiptPatch = { receiptId: nextReceiptId || null };
+        }
+        const patchPayload: Omit<Partial<Expense>, 'receiptId'> & {
+          journeyId: string;
+          receiptId?: string | null;
+        } = {
+          ...payload,
+          journeyId,
+          ...receiptPatch,
+        };
+        const saved = await updateMut.mutateAsync({
+          id: expenseId,
+          patch: patchPayload,
+        });
+        onSaved(saved);
+      } else {
+        const saved = await addMut.mutateAsync(payload);
+        onSaved(saved);
+      }
+    } catch (error) {
+      showToast(getExpenseErrorMessage(error));
     }
   }
 
@@ -231,7 +254,11 @@ export function ExpenseForm({
       <TopBar
         title={
           <span>
-            {mode === 'edit' ? '지출 내역 수정' : mode === 'ocr' ? '영수증 확인' : '지출 내역 추가'}
+            {mode === 'edit'
+              ? '지출 내역 수정'
+              : mode === 'ocr'
+                ? '영수증 확인'
+                : '지출 내역 추가'}
           </span>
         }
         onBack={onCanceled}
