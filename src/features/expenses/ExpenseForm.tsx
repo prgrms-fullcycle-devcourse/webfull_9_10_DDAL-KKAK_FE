@@ -153,8 +153,14 @@ export function ExpenseForm({
 
   useEffect(() => {
     if (!journey) return;
-    if (journey.rateMode === 'fixed' || journey.currency === 'KRW') {
-      setEffectiveRate(journey.rate);
+    if (journey.currency === 'KRW') {
+      setEffectiveRate(1);
+      return;
+    }
+    if (journey.rateMode === 'fixed') {
+      // journey.rate가 1이면 백엔드가 fixedExchangeRate를 반환하지 않은 것 → demo값으로 보완
+      const rate = journey.rate > 1 ? journey.rate : demoRateForCurrency(journey.currency);
+      setEffectiveRate(rate);
       return;
     }
     // realtime: 백엔드 환율 API 조회 → 실패 시 demo 값으로 폴백
