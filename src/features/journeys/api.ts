@@ -212,11 +212,19 @@ export async function updateTrip(tripId: string, patch: Partial<Journey>): Promi
     });
     const trip = normalizeJourney(updated);
 
-    // 참여자 diff: 기존 ID 맵과 새 목록 비교
+    // 참여자 diff: 기존 ID 맵과 새 목록 비교 (실패해도 여행 수정은 성공 유지)
     if (patch.participants !== undefined) {
-      const existingIds = patch.participantIdsByName ?? trip.participantIdsByName ?? {};
-      const participantIdsByName = await syncParticipants(tripId, existingIds, patch.participants);
-      return { ...trip, participants: patch.participants, participantIdsByName };
+      try {
+        const existingIds = patch.participantIdsByName ?? trip.participantIdsByName ?? {};
+        const participantIdsByName = await syncParticipants(
+          tripId,
+          existingIds,
+          patch.participants,
+        );
+        return { ...trip, participants: patch.participants, participantIdsByName };
+      } catch {
+        return { ...trip, participants: patch.participants };
+      }
     }
 
     return trip;

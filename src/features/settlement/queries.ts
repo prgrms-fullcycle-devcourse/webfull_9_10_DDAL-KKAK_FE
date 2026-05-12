@@ -71,7 +71,13 @@ export function useSettlementQuery(tripId: string | undefined) {
     queryKey: ['settlement', tripId],
     enabled: !!tripId,
     queryFn: async (): Promise<SettlementData> => {
-      if (hasBackendAuth()) return fetchSettlement(tripId!);
+      if (hasBackendAuth()) {
+        try {
+          return await fetchSettlement(tripId!);
+        } catch {
+          return buildLocalSettlement(tripId!);
+        }
+      }
       await new Promise((r) => setTimeout(r, 100));
       return buildLocalSettlement(tripId!);
     },
@@ -109,7 +115,13 @@ export function useSettlementSummaryQuery(tripId: string | undefined) {
     queryKey: ['settlementSummary', tripId],
     enabled: !!tripId,
     queryFn: async (): Promise<SettlementSummaryData> => {
-      if (hasBackendAuth()) return fetchSettlementSummary(tripId!);
+      if (hasBackendAuth()) {
+        try {
+          return await fetchSettlementSummary(tripId!);
+        } catch {
+          return buildLocalSettlementSummary(tripId!);
+        }
+      }
       await new Promise((r) => setTimeout(r, 80));
       return buildLocalSettlementSummary(tripId!);
     },
