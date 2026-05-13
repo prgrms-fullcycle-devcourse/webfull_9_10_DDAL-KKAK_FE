@@ -1,12 +1,25 @@
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/features/auth/useAuth';
 import { oauthStartUrl } from '@/lib/api';
+
+/** 백엔드가 `/login?err=` 또는 `/login?error=` 로 넘기는 OAuth 오류 코드 */
+const OAUTH_LOGIN_ERRORS: Record<string, string> = {
+  CSRF_ERROR: '보안 검증(state)에 실패했어요. 시크릿 창이 아닌 일반 창에서 다시 시도하거나, 잠시 후 한 번만 로그인해 주세요.',
+  USER_CANCELLED: '소셜 로그인을 취소했어요.',
+  INVALID_OAUTH_CODE: '인증 코드가 만료됐거나 변조됐어요. 다시 시도해 주세요.',
+};
 
 export function LoginPage() {
   const nav = useNavigate();
   const { login } = useAuth();
   const { state } = useLocation() as { state: { from?: string } | null };
+  const [searchParams] = useSearchParams();
   const next = state?.from ?? '/';
+
+  const oauthErrCode = searchParams.get('err') ?? searchParams.get('error');
+  const oauthErrMessage = oauthErrCode
+    ? (OAUTH_LOGIN_ERRORS[oauthErrCode] ?? `로그인 처리 중 오류가 있어요. (${oauthErrCode})`)
+    : null;
 
   // OAuth 시작: 백엔드의 /auth/{provider}/login 으로 이동.
   // 백엔드가 302로 카카오/구글 인증 페이지로 보내고, 인증 완료 시
@@ -35,6 +48,15 @@ export function LoginPage() {
           <br />
           기록은 네가 할래?
         </p>
+
+        {oauthErrMessage ? (
+          <p
+            className="mt-6 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-left text-xs font-bold leading-relaxed text-amber-900"
+            role="alert"
+          >
+            {oauthErrMessage}
+          </p>
+        ) : null}
 
         <div className="mt-10 w-full space-y-3">
           <button

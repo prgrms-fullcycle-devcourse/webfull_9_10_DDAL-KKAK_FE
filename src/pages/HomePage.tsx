@@ -1,16 +1,17 @@
-import { Camera, Plus, User } from 'lucide-react';
+import { Camera, Plus, User, Wallet } from 'lucide-react';
 import { useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { BottomNav } from '@/components/layout/BottomNav';
 import { Fab, FabStack } from '@/components/layout/Fab';
 import { getElapsedDays, getJourneyPhase, getTripDays, getTripStatusLabel } from '@/lib/dates';
-import { formatKRW, formatLocal } from '@/lib/money';
+import { formatKRW } from '@/lib/money';
 import type { Journey } from '@/features/journeys/types';
 import type { Expense } from '@/features/expenses/types';
 import { useAllExpensesQuery } from '@/features/expenses/queries';
 import { useAuth } from '@/features/auth/useAuth';
 import { useJourneysQuery } from '@/features/journeys/queries';
-import { sumMySpendKRW } from '@/features/settlement/calc';
+import { withEffectiveTripFinance } from '@/features/journeys/storage';
+import { sumMySpendKRW, sumTotalKRW } from '@/features/settlement/calc';
 import { useSettlementSummaryQuery } from '@/features/settlement/queries';
 
 /**
@@ -142,6 +143,44 @@ function formatMembers(participants: string[]): string {
   return `${participants[0]} 외 ${participants.length - 1}명`;
 }
 
+/** 원화 표기 — 기획안처럼 소액일 때 소수 한 자리까지 */
+function formatWonFlexible(value: number): string {
+  const t = Math.round(value * 10) / 10;
+  if (Number.isInteger(t)) return formatKRW(t);
+  return new Intl.NumberFormat('ko-KR', {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1,
+  }).format(t);
+}
+
+/** 홈 카드 메인 금액 — `US$` 대신 짧은 통화 기호로 표기 */
+function formatLocalWalletHeadline(currency: string, amount: number): string {
+  const intUnit = currency === 'JPY' || currency === 'KRW';
+  const n = intUnit ? Math.round(amount) : amount;
+  if (currency === 'KRW') {
+    return `${formatKRW(n)}원`;
+  }
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency,
+    currencyDisplay: 'narrowSymbol',
+    maximumFractionDigits: intUnit ? 0 : 2,
+  }).format(n);
+}
+
+/** 예산 대비 사용 비율(%) — 아주 작은 지출도 0%로 뭉개지지 않게 */
+function budgetUsagePercent(
+  spentKRW: number,
+  budgetKRW: number,
+): { barPct: number; label: string; raw: number } {
+  if (!budgetKRW || budgetKRW <= 0) return { barPct: 0, label: '0%', raw: 0 };
+  const raw = (spentKRW / budgetKRW) * 100;
+  const barPct = Math.min(raw, 100);
+  const label =
+    raw > 0 && raw < 0.1 ? `${raw.toFixed(2)}%` : raw < 10 && raw > 0 ? `${raw.toFixed(1)}%` : `${Math.min(Math.round(raw), 999)}%`;
+  return { barPct, label, raw };
+}
+
 function CompactJourneyRow({
   j,
   expenses,
@@ -151,15 +190,17 @@ function CompactJourneyRow({
   expenses: Expense[];
   onClick: () => void;
 }) {
-  const phase = getJourneyPhase(j.startDate, j.endDate);
-  const status = getTripStatusLabel(j.startDate, j.endDate);
-  const tripExpenses = expenses.filter((e) => e.journeyId === j.id);
-  const spentKRW = sumMySpendKRW(j, tripExpenses);
-  const tripDays = getTripDays(j.startDate, j.endDate);
+  const jc = withEffectiveTripFinance(j);
+  const phase = getJourneyPhase(jc.startDate, jc.endDate);
+  const status = getTripStatusLabel(jc.startDate, jc.endDate);
+  const tripExpenses = expenses.filter((e) => e.journeyId === jc.id);
+  const spentKRW = sumMySpendKRW(jc, tripExpenses);
+  const tripDays = getTripDays(jc.startDate, jc.endDate);
 
-  const hasBudget = typeof j.budgetKRW === 'number' && j.budgetKRW > 0;
+  const hasBudget = typeof jc.budgetKRW === 'number' && jc.budgetKRW > 0;
+  const budgetKRW = hasBudget ? jc.budgetKRW! : 0;
 
-  const { data: settleSummary } = useSettlementSummaryQuery(j.id);
+  const { data: settleSummary } = useSettlementSummaryQuery(jc.id);
   const myNetKRW = settleSummary?.summary?.netAmountKrw ?? 0;
 
   const settleTone: 'credit' | 'debit' | 'none' =
@@ -185,14 +226,14 @@ function CompactJourneyRow({
     >
       {/* 썸네일 (국기) */}
       <div className="grid size-12 shrink-0 place-items-center rounded-xl bg-slate-50 text-2xl">
-        {countryEmoji(j.country)}
+        {countryEmoji(jc.country)}
       </div>
 
       {/* 가운데: 이름 + 메타 */}
       <div className="min-w-0 flex-1">
-        <h4 className="truncate text-sm font-black tracking-tight text-slate-900">{j.name}</h4>
+        <h4 className="truncate text-sm font-black tracking-tight text-slate-900">{jc.name}</h4>
         <p className="mt-0.5 truncate text-[10px] font-bold text-slate-400">
-          {formatCompactDateRange(j.startDate, j.endDate)} · {formatMembers(j.participants)}
+          {formatCompactDateRange(jc.startDate, jc.endDate)} · {formatMembers(jc.participants)}
         </p>
       </div>
 
@@ -207,9 +248,7 @@ function CompactJourneyRow({
           <>
             <p className="text-sm font-black text-blue-600">{status.label}</p>
             <p className="mt-0.5 text-[10px] font-bold text-slate-400">
-              {hasBudget
-                ? `예산 ${formatKRW(j.budgetKRW as number)}원`
-                : `${tripDays}일 · ${j.participants.length}명`}
+              {hasBudget ? `예산 ${formatKRW(budgetKRW)}원` : `${tripDays}일 · ${jc.participants.length}명`}
             </p>
           </>
         )}
@@ -227,15 +266,16 @@ function JourneyCard({
   expenses: Expense[];
   onClick: () => void;
 }) {
-  const status = getTripStatusLabel(j.startDate, j.endDate);
-  const phase = getJourneyPhase(j.startDate, j.endDate);
-  const tripExpenses = expenses.filter((e) => e.journeyId === j.id);
-  const spentKRW = sumMySpendKRW(j, tripExpenses);
+  const jc = withEffectiveTripFinance(j);
+  const status = getTripStatusLabel(jc.startDate, jc.endDate);
+  const phase = getJourneyPhase(jc.startDate, jc.endDate);
+  const tripExpenses = expenses.filter((e) => e.journeyId === jc.id);
+  const spentKRW = sumMySpendKRW(jc, tripExpenses);
 
-  const hasBudget = typeof j.budgetKRW === 'number' && j.budgetKRW > 0;
-  const budgetKRW = hasBudget ? (j.budgetKRW as number) : 0;
-  const tripDays = getTripDays(j.startDate, j.endDate);
-  const elapsedDays = getElapsedDays(j.startDate, j.endDate);
+  const hasBudget = typeof jc.budgetKRW === 'number' && jc.budgetKRW > 0;
+  const budgetKRW = hasBudget ? jc.budgetKRW! : 0;
+  const tripDays = getTripDays(jc.startDate, jc.endDate);
+  const elapsedDays = getElapsedDays(jc.startDate, jc.endDate);
   const expenseCount = tripExpenses.length;
 
   const insight = (() => {
@@ -251,7 +291,7 @@ function JourneyCard({
         const perDay = Math.round(budgetKRW / tripDays);
         return `하루 ${formatKRW(perDay)}원 예산`;
       }
-      return `${tripDays}일 일정 · ${j.participants.length}명`;
+      return `${tripDays}일 일정 · ${jc.participants.length}명`;
     }
     // past
     if (expenseCount === 0) return '기록된 지출이 없어요';
@@ -261,10 +301,12 @@ function JourneyCard({
   const isOver = hasBudget && spentKRW > budgetKRW;
   const remainKRW = Math.max(budgetKRW - spentKRW, 0);
   const overKRW = Math.max(spentKRW - budgetKRW, 0);
-  const usedRatio = hasBudget ? Math.min(Math.round((spentKRW / budgetKRW) * 100), 999) : 0;
-  const progressPct = hasBudget ? Math.min(usedRatio, 100) : 0;
+  const { barPct: progressPct, label: usedRatioLabel, raw: usedRawPct } = budgetUsagePercent(
+    spentKRW,
+    budgetKRW,
+  );
 
-  const { data: settleSummary } = useSettlementSummaryQuery(j.id);
+  const { data: settleSummary } = useSettlementSummaryQuery(jc.id);
   const myNetKRW = settleSummary?.summary?.netAmountKrw ?? 0;
   const settleTone: 'credit' | 'debit' | 'none' =
     myNetKRW > 0 ? 'credit' : myNetKRW < 0 ? 'debit' : 'none';
@@ -285,131 +327,171 @@ function JourneyCard({
         ? 'bg-orange-50 text-orange-600'
         : 'bg-slate-100 text-slate-400';
 
+  const settleSummaryLine =
+    settleTone === 'none'
+      ? settleLabel
+      : `내 정산액: ${myNetKRW > 0 ? '+' : myNetKRW < 0 ? '−' : ''}${formatWonFlexible(settleAmountAbs)}원`;
+
+  const settleSummaryClass =
+    settleTone === 'none'
+      ? settleColor
+      : settleTone === 'debit'
+        ? 'text-[#FF4D4D]'
+        : 'text-blue-600';
+
+  const rate = jc.rate > 0 ? jc.rate : 1;
+  const spentLocal = spentKRW / rate;
+  const remainLocal = remainKRW / rate;
+  const overLocal = overKRW / rate;
+
+  const tripSpendTotalKRW = sumTotalKRW(jc, tripExpenses);
+
+  const noBudgetSharePct =
+    tripSpendTotalKRW > 0 ? Math.min(100, (spentKRW / tripSpendTotalKRW) * 100) : 0;
+  const noBudgetShareLabel =
+    tripSpendTotalKRW > 0
+      ? noBudgetSharePct < 0.1 && noBudgetSharePct > 0
+        ? `${noBudgetSharePct.toFixed(2)}%`
+        : noBudgetSharePct < 10 && noBudgetSharePct > 0
+          ? `${noBudgetSharePct.toFixed(1)}%`
+          : `${Math.round(noBudgetSharePct)}%`
+      : '0%';
+
   return (
     <button
       type="button"
       onClick={onClick}
-      className="w-full cursor-pointer rounded-[32px] border border-slate-100 bg-white p-5 text-left shadow-sm active:scale-[0.99]"
+      className="w-full cursor-pointer rounded-[24px] border border-slate-100/80 bg-white p-6 text-left shadow-md active:scale-[0.99]"
     >
-      <div className="mb-4 flex items-start justify-between">
-        <div className="flex items-center gap-2">
-          <span className="rounded bg-slate-900 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-white">
-            {j.country}
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="rounded-lg bg-slate-900 px-2.5 py-1 text-[11px] font-black text-white">
+            {jc.country}
           </span>
-          <span className={`rounded px-2 py-0.5 text-[10px] font-bold ${statusChip}`}>
+          <span className={`rounded-lg px-2.5 py-1 text-[11px] font-black ${statusChip}`}>
             {status.label}
           </span>
         </div>
-        <span className="text-[10px] font-bold tracking-tight text-slate-400">
-          {j.startDate.replaceAll('-', '.')} - {j.endDate.split('-')[2]}
+        <span className="shrink-0 pt-0.5 text-[11px] font-bold tracking-tight text-slate-400">
+          {formatCompactDateRange(jc.startDate, jc.endDate)}
         </span>
       </div>
 
-      <div className="mb-6">
-        <h3 className="mb-1 text-xl font-black tracking-tight">{j.name}</h3>
-        <p className="text-xs font-bold text-slate-400">{insight}</p>
-      </div>
+      <h3 className="mt-4 text-xl font-black leading-snug tracking-tight text-slate-900">{jc.name}</h3>
 
-      {hasBudget ? (
-        <div
-          className={`mb-6 rounded-2xl border p-4 ${
-            isOver ? 'border-red-100 bg-red-50/60' : 'border-blue-100 bg-blue-50/60'
+      <p className="mt-1.5 text-xs font-bold text-slate-400">{insight}</p>
+
+      {/* 핵심: 현지 잔액/지출 — 기획상 가장 크게 */}
+      <div className="mt-5">
+        <p className="text-xs font-bold text-slate-500">
+          {hasBudget
+            ? isOver
+              ? '초과 금액'
+              : '남은예산'
+            : '현지 지출'}
+        </p>
+        <p
+          className={`mt-1 text-[2rem] font-black leading-tight tracking-tight tabular-nums sm:text-[2.25rem] ${
+            hasBudget && isOver ? 'text-[#FF4D4D]' : 'text-blue-600'
           }`}
         >
-          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">
-            {isOver ? '초과 지출' : '남은 예산'}
+          {hasBudget
+            ? formatLocalWalletHeadline(jc.currency, isOver ? overLocal : remainLocal)
+            : formatLocalWalletHeadline(jc.currency, spentLocal)}
+        </p>
+        {!hasBudget ? (
+          <p className="mt-1 text-[10px] font-bold leading-relaxed text-slate-400">
+            목표 예산이 없어 <span className="text-slate-600">남은 잔액</span>은 계산되지 않아요. 위 금액은{' '}
+            <span className="font-black text-slate-600">내 누적 지출</span>이에요.
           </p>
-          <p
-            className={`mt-1 text-2xl font-black tracking-tight ${
-              isOver ? 'text-[#FF4D4D]' : 'text-blue-600'
-            }`}
-          >
-            {formatKRW(isOver ? overKRW : remainKRW)}
-            <span className="ml-1 text-sm font-black text-slate-400">원</span>
+        ) : (
+          <p className={`mt-1 text-sm font-black tabular-nums ${isOver ? 'text-[#FF4D4D]' : 'text-slate-900'}`}>
+            {formatWonFlexible(isOver ? overKRW : remainKRW)}원
           </p>
-          <p className="mt-1 text-[10px] font-bold text-slate-400">
-            ≈ {formatLocal((isOver ? overKRW : remainKRW) / j.rate)} {j.currency}
-          </p>
+        )}
+      </div>
 
-          <div className="mt-4">
-            <div className="mb-1.5 flex items-center justify-between">
-              <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
-                예산 사용 현황
-              </span>
-              <span
-                className={`text-[11px] font-black ${
-                  isOver
-                    ? 'text-[#FF4D4D]'
-                    : usedRatio >= 80
-                      ? 'text-orange-500'
-                      : 'text-blue-600'
-                }`}
-              >
-                {usedRatio}%
-              </span>
-            </div>
-            <div className="h-2 w-full overflow-hidden rounded-full bg-white">
-              <div
-                className={`h-full rounded-full transition-all ${
-                  isOver
-                    ? 'bg-[#FF4D4D]'
-                    : usedRatio >= 80
-                      ? 'bg-orange-500'
-                      : 'bg-blue-600'
-                }`}
-                style={{ width: `${progressPct}%` }}
-              />
-            </div>
-            <div className="mt-2 flex items-center justify-between text-[10px] font-bold text-slate-500">
-              <span>
-                <span
-                  className={`font-black ${isOver ? 'text-[#FF4D4D]' : 'text-slate-700'}`}
-                >
-                  {formatKRW(spentKRW)}원
-                </span>{' '}
-                사용
-              </span>
-              <span>목표 {formatKRW(budgetKRW)}원</span>
-            </div>
-            <div className="mt-1 flex items-center justify-between text-[10px] font-bold text-slate-300">
-              <span>
-                약 {formatLocal(spentKRW / j.rate)} {j.currency}
-              </span>
-              <span>
-                약 {formatLocal(budgetKRW / j.rate)} {j.currency}
-              </span>
+      {/* 자산 현황 바: 사용 / 전체(예산 또는 동행 전체 지출) */}
+      <div className="mt-5 rounded-2xl bg-slate-100/90 px-4 py-4">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex min-w-0 items-center gap-1.5">
+            <Wallet className="size-4 shrink-0 text-slate-500" aria-hidden />
+            <div className="min-w-0">
+              <p className="truncate text-sm font-black text-slate-800">예산 사용 현황</p>
+              <p className="truncate text-[9px] font-bold text-slate-400">
+                {hasBudget ? '내 지출 / 목표 예산(원)' : '내 지출 / 동행 전체 지출 합계(원)'}
+              </p>
             </div>
           </div>
+          <span
+            className={`shrink-0 text-sm font-black ${
+              hasBudget
+                ? isOver
+                  ? 'text-[#FF4D4D]'
+                  : usedRawPct >= 80
+                    ? 'text-orange-500'
+                    : 'text-blue-600'
+                : 'text-blue-600'
+            }`}
+          >
+            {hasBudget ? usedRatioLabel : noBudgetShareLabel}
+          </span>
         </div>
-      ) : (
-        <div className="mb-6 rounded-2xl border border-dashed border-slate-200 bg-slate-50/40 px-4 py-3">
-          <p className="text-[11px] font-bold text-slate-500">
-            내 지출액 <span className="font-black text-slate-900">{formatKRW(spentKRW)}원</span>
-            <span className="ml-1 text-[10px] font-bold text-slate-400">
-              (약 {formatLocal(spentKRW / j.rate)} {j.currency})
-            </span>
-          </p>
+        <div className="mt-3 h-2.5 w-full overflow-hidden rounded-full bg-slate-200/90">
+          <div
+            className={`h-full rounded-full transition-all ${
+              hasBudget
+                ? isOver
+                  ? 'bg-[#FF4D4D]'
+                  : usedRawPct >= 80
+                    ? 'bg-orange-500'
+                    : 'bg-blue-600'
+                : 'bg-blue-600'
+            }`}
+            style={{
+              width: `${hasBudget ? progressPct : Math.min(noBudgetSharePct, 100)}%`,
+            }}
+          />
         </div>
-      )}
+        <div className="mt-3 flex items-center justify-between gap-2 text-xs font-bold text-slate-500">
+          <span>
+            <span className={`font-black ${hasBudget && isOver ? 'text-[#FF4D4D]' : 'text-slate-800'}`}>
+              {formatWonFlexible(spentKRW)}원
+            </span>{' '}
+            사용
+          </span>
+          <span className="shrink-0 text-right text-slate-500">
+            {hasBudget ? (
+              <>
+                목표 예산{' '}
+                <span className="font-black text-slate-700">{formatKRW(budgetKRW)}원</span>
+              </>
+            ) : (
+              <>
+                동행 합계{' '}
+                <span className="font-black text-slate-700">{formatKRW(tripSpendTotalKRW)}원</span>
+              </>
+            )}
+          </span>
+        </div>
+      </div>
 
-      <div className="flex items-center justify-between border-t border-slate-100 pt-4">
+      <div className="mt-6 flex items-center justify-between border-t border-slate-100 pt-4">
         <div className="flex -space-x-2">
-          {j.participants.map((p) => (
+          {jc.participants.map((p) => (
             <div
               key={p}
-              className="grid size-8 place-items-center rounded-full border-2 border-white bg-slate-200 text-[10px] font-black text-slate-500"
+              className="grid size-9 place-items-center rounded-full border-2 border-white bg-slate-200 text-[11px] font-black text-slate-600"
             >
               {p[0]}
             </div>
           ))}
         </div>
-        <div className="text-right">
-          <p className="mb-0.5 text-[10px] font-black uppercase tracking-widest text-slate-300">
+        <div className="min-w-0 max-w-[55%] text-right">
+          <p className="mb-0.5 text-[10px] font-black uppercase tracking-widest text-slate-400">
             정산 요약
           </p>
-          <p className={`text-xs font-black ${settleColor}`}>
-            {settleTone === 'none' ? settleLabel : `${settleLabel} ${formatKRW(settleAmountAbs)}원`}
-          </p>
+          <p className={`truncate text-xs font-black ${settleSummaryClass}`}>{settleSummaryLine}</p>
         </div>
       </div>
     </button>
@@ -489,10 +571,10 @@ export function HomePage() {
   return (
     <div className="relative min-h-dvh bg-slate-50 pb-20">
       <header className="flex items-start justify-between px-6 pt-12">
-        <h1 className="text-2xl font-bold leading-tight tracking-tight text-slate-900">
+        <h1 className="max-w-[min(100%,18rem)] text-2xl font-bold leading-snug tracking-tight text-slate-900">
           즐거운 여행에만 몰입하세요,
           <br />
-          <span className="text-blue-600">기록은 틱(Tick)</span>이 할게요.
+          <span className="font-black text-blue-600">기록은 틱(Tick)</span>이 할게요.
         </h1>
         <Link
           to="/settings"
@@ -511,7 +593,7 @@ export function HomePage() {
         ) : (
           <>
             <div className="mb-6 flex items-center justify-between">
-              <h2 className="text-lg font-black tracking-tight">나의 여행</h2>
+              <h2 className="text-lg font-black tracking-tight">나의 여행 리스트</h2>
               <Link
                 to="/journeys/new"
                 className="flex items-center text-sm font-black text-blue-600"
@@ -519,7 +601,6 @@ export function HomePage() {
                 <Plus className="mr-1 size-4" /> 새 여행
               </Link>
             </div>
-
             <Section
               title="여행 중"
               subtitle="오늘 날짜가 여행 기간 안에 있는 여정"

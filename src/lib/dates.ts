@@ -1,9 +1,31 @@
+/**
+ * `YYYY-MM-DD`만 있을 때 `new Date("2026-05-12")`는 UTC 자정이라 KST 등에서는
+ * 같은 달력 날이 로컬 자정보다 늦게 잡혀 "다가오는 여행"으로 오분류된다.
+ * 달력 기준 비교는 로컬 0시로 맞춘다.
+ */
+function startOfLocalDayFromDateKey(dateKey: string): Date {
+  const trimmed = dateKey.trim().slice(0, 10);
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(trimmed);
+  if (m) {
+    const y = Number(m[1]);
+    const mo = Number(m[2]) - 1;
+    const d = Number(m[3]);
+    return new Date(y, mo, d, 0, 0, 0, 0);
+  }
+  const fallback = new Date(dateKey);
+  if (!Number.isNaN(fallback.getTime())) {
+    fallback.setHours(0, 0, 0, 0);
+    return fallback;
+  }
+  return new Date(NaN);
+}
+
 export function getTripStatusLabel(startDate: string, endDate: string) {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  const start = new Date(startDate);
-  const end = new Date(endDate);
+  const start = startOfLocalDayFromDateKey(startDate);
+  const end = startOfLocalDayFromDateKey(endDate);
 
   if (today < start) {
     const diffTime = start.getTime() - today.getTime();
@@ -32,8 +54,8 @@ export function getJourneyPhase(startDate: string, endDate: string): JourneyPhas
 
 /** 여행 총 일수 (시작일/종료일 포함) */
 export function getTripDays(startDate: string, endDate: string): number {
-  const s = new Date(startDate);
-  const e = new Date(endDate);
+  const s = startOfLocalDayFromDateKey(startDate);
+  const e = startOfLocalDayFromDateKey(endDate);
   if (Number.isNaN(s.getTime()) || Number.isNaN(e.getTime())) return 1;
   const diff = Math.floor((e.getTime() - s.getTime()) / 86_400_000) + 1;
   return Math.max(1, diff);
@@ -43,8 +65,8 @@ export function getTripDays(startDate: string, endDate: string): number {
 export function getElapsedDays(startDate: string, endDate: string): number {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const s = new Date(startDate);
-  const e = new Date(endDate);
+  const s = startOfLocalDayFromDateKey(startDate);
+  const e = startOfLocalDayFromDateKey(endDate);
   if (today < s) return 0;
   if (today > e) return getTripDays(startDate, endDate);
   return Math.floor((today.getTime() - s.getTime()) / 86_400_000) + 1;

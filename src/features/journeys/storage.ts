@@ -1,6 +1,7 @@
 import { MOCK_JOURNEYS } from '@/mocks/data';
 import type { CurrencyCode } from '@/types/common';
 import type { Journey } from '@/features/journeys/types';
+import { demoRateForCurrency } from '@/lib/currencyRates';
 import { loadAllExpenses, saveAllExpenses } from '@/features/expenses/storage';
 
 // v4: 수정 모드에서 authName이 selfParticipant를 덮어쓰던 버그로 인해
@@ -182,4 +183,34 @@ function deleteRateCache(tripId: string): void {
   const map = loadRateMap();
   delete map[tripId];
   localStorage.setItem(RATE_KEY, JSON.stringify(map));
+}
+
+/**
+ * 카드·정산 계산용: API가 rate=1·예산 없이 내려줄 때 로컬 캐시·데모 환율·저장 예산을 합친 여행 객체.
+ * (타임라인 `useMemo`와 동일 기준 — 현지 잔액 표시가 원화와 숫자만 같은 버그 방지)
+ */
+export function withEffectiveTripFinance(journey: Journey): Journey {
+  let rate =
+    typeof journey.rate === 'number' && Number.isFinite(journey.rate) && journey.rate > 0
+      ? journey.rate
+      : 1;
+  const cached = loadRateCache(journey.id);
+  if (cached && typeof cached.rate === 'number' && cached.rate > 1) {
+    rate = cached.rate;
+  } else if (rate === 1 && journey.currency !== 'KRW') {
+    rate = demoRateForCurrency(journey.currency as CurrencyCode);
+  }
+
+  const withRate: Journey = { ...journey, rate };
+
+  const stored = loadBudget(withRate.id);
+  if (
+    (withRate.budgetKRW == null || withRate.budgetKRW <= 0) &&
+    stored !== undefined &&
+    stored > 0
+  ) {
+    return { ...withRate, budgetKRW: stored };
+  }
+
+  return withRate;
 }
