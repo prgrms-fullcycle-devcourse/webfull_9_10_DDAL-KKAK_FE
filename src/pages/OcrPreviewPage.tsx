@@ -64,9 +64,9 @@ export function OcrPreviewPage() {
   };
   const receiptId = state?.receiptId;
   const cleanupReceiptJob = async () => {
-    if (!receiptId || !user?.id) return;
+    if (!receiptId) return;
     try {
-      await deleteReceiptOcrJob({ receiptId, userId: user.id });
+      await deleteReceiptOcrJob({ receiptId });
     } catch {
       // 삭제 실패와 무관하게 이동 동선은 유지
     }
@@ -424,9 +424,9 @@ export function OcrPreviewPage() {
         <button
           type="button"
           onClick={async () => {
-            if (!receiptId || !user?.id) return;
+            if (!receiptId) return;
             try {
-              await deleteReceiptOcrJob({ receiptId, userId: user.id });
+              await deleteReceiptOcrJob({ receiptId });
               setImageDataUrl(null);
               setDraft({
                 storeName: '',
