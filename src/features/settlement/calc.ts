@@ -37,17 +37,14 @@ export function sumMySpendKRW(journey: Journey, expenses: Expense[]) {
   return expenses.reduce((acc, e) => {
     const myShareLocal = expenseMyShareLocal(journey, e);
     if (myShareLocal === 0) return acc;
-    // fxRateTripToKrw: 지출 저장 시 프론트가 직접 기록한 "1 현지통화 → KRW" 환율.
-    // 백엔드 amountKrw는 환율 방향이 반대로 계산될 수 있으므로 fxRateTripToKrw를 우선 사용.
-    const rate = e.fxRateTripToKrw ?? journey.rate;
-    return acc + Math.round(myShareLocal * rate);
+    // FIXED·REALTIME 모두 journey.rate 사용.
+    // FIXED: 사용자가 설정한 고정환율 / REALTIME: 호출 시점에 live rate가 주입된 값
+    return acc + Math.round(myShareLocal * journey.rate);
   }, 0);
 }
 export function sumTotalKRW(journey: Journey, expenses: Expense[]) {
   return expenses.reduce((acc, e) => {
-    // amountKrw보다 fxRateTripToKrw 기반 계산 우선 (백엔드 amountKrw 환율 방향 불일치 대응)
-    const rate = e.fxRateTripToKrw ?? journey.rate;
-    return acc + Math.round(e.amountLocal * rate);
+    return acc + Math.round(e.amountLocal * journey.rate);
   }, 0);
 }
 export function sumTotalLocal(expenses: Expense[]) {
