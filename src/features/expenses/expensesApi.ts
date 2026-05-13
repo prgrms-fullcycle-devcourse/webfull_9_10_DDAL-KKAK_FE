@@ -63,7 +63,9 @@ function toExpensePayload(
     | (Omit<Partial<Expense>, 'receiptId'> & { journeyId: string; receiptId?: string | null }),
 ) {
   const amountOriginal =
-    'amountLocal' in expense && expense.amountLocal !== undefined ? Number(expense.amountLocal) : undefined;
+    'amountLocal' in expense && expense.amountLocal !== undefined
+      ? Number(expense.amountLocal)
+      : undefined;
   const fxRate =
     'fxRateTripToKrw' in expense && expense.fxRateTripToKrw !== undefined
       ? Number(expense.fxRateTripToKrw)
@@ -93,8 +95,10 @@ function toExpensePayload(
   if (fxRate !== undefined) payload.fxRateTripToKrw = fxRate;
   if (amountKrw !== undefined) payload.amountKrw = amountKrw;
   if ('fxMode' in expense && expense.fxMode !== undefined) payload.fxMode = expense.fxMode;
-  if ('splitMode' in expense && expense.splitMode !== undefined) payload.splitMode = expense.splitMode;
-  if ('splitWith' in expense && expense.splitWith !== undefined) payload.splitWith = expense.splitWith;
+  if ('splitMode' in expense && expense.splitMode !== undefined)
+    payload.splitMode = expense.splitMode;
+  if ('splitWith' in expense && expense.splitWith !== undefined)
+    payload.splitWith = expense.splitWith;
   if ('method' in expense && expense.method !== undefined) payload.method = expense.method;
   if ('emoji' in expense && expense.emoji !== undefined) payload.emoji = expense.emoji;
   if ('category' in expense && expense.category !== undefined) payload.category = expense.category;
@@ -115,7 +119,11 @@ function fromApiExpense(raw: unknown, fallback: Expense): Expense {
     id: typeof raw.id === 'string' ? raw.id : fallback.id,
     journeyId: typeof raw.tripId === 'string' ? raw.tripId : fallback.journeyId,
     receiptId:
-      raw.receiptId === null ? undefined : typeof raw.receiptId === 'string' ? raw.receiptId : fallback.receiptId,
+      raw.receiptId === null
+        ? undefined
+        : typeof raw.receiptId === 'string'
+          ? raw.receiptId
+          : fallback.receiptId,
     storeName: typeof raw.title === 'string' ? raw.title : fallback.storeName,
     amountLocal:
       typeof raw.amountOriginal === 'number'
@@ -124,7 +132,9 @@ function fromApiExpense(raw: unknown, fallback: Expense): Expense {
     currency: mappedCurrency || fallback.currency,
     paidAt: typeof raw.spentAt === 'string' ? raw.spentAt : fallback.paidAt,
     payerParticipantId:
-      typeof raw.payerParticipantId === 'string' ? raw.payerParticipantId : fallback.payerParticipantId,
+      typeof raw.payerParticipantId === 'string'
+        ? raw.payerParticipantId
+        : fallback.payerParticipantId,
     // payer: payerName(우선) → payerParticipantId → fallback 순. payerParticipantId만 있으면
     // 이름 역변환은 components 레이어(useExpensesQuery)에서 수행.
     payer:
@@ -143,13 +153,19 @@ function fromApiExpense(raw: unknown, fallback: Expense): Expense {
       typeof raw.fxRateTripToKrw === 'number'
         ? raw.fxRateTripToKrw
         : Number(raw.fxRateTripToKrw) || fallback.fxRateTripToKrw,
-    amountKrw: typeof raw.amountKrw === 'number' ? raw.amountKrw : Number(raw.amountKrw) || fallback.amountKrw,
+    amountKrw:
+      typeof raw.amountKrw === 'number'
+        ? raw.amountKrw
+        : Number(raw.amountKrw) || fallback.amountKrw,
     updatedAt: typeof raw.updatedAt === 'string' ? raw.updatedAt : fallback.updatedAt,
     createdAt: typeof raw.createdAt === 'string' ? raw.createdAt : fallback.createdAt,
   };
 }
 
-export async function listExpensesApi(params: { tripId: string; userId: string }): Promise<Expense[]> {
+export async function listExpensesApi(params: {
+  tripId: string;
+  userId: string;
+}): Promise<Expense[]> {
   const res = await fetch(expensesUrl(`expenses?tripId=${encodeURIComponent(params.tripId)}`), {
     method: 'GET',
     headers: { 'x-user-id': params.userId },
@@ -157,7 +173,8 @@ export async function listExpensesApi(params: { tripId: string; userId: string }
   const body = await parseJson(res);
   const mapped = mapExpenseError(body);
   if (mapped) throw mapped;
-  if (!res.ok) throw new ExpenseApiError(`지출 목록 조회 실패 (${res.status})`, { status: res.status });
+  if (!res.ok)
+    throw new ExpenseApiError(`지출 목록 조회 실패 (${res.status})`, { status: res.status });
   if (!isRecord(body) || body.success !== true || !Array.isArray(body.data)) return [];
   return body.data
     .map((row) =>
@@ -180,7 +197,10 @@ export async function listExpensesApi(params: { tripId: string; userId: string }
     .sort((a, b) => (a.paidAt < b.paidAt ? 1 : -1));
 }
 
-export async function getExpenseApi(params: { expenseId: string; userId: string }): Promise<Expense> {
+export async function getExpenseApi(params: {
+  expenseId: string;
+  userId: string;
+}): Promise<Expense> {
   const res = await fetch(expensesUrl(`expenses/${encodeURIComponent(params.expenseId)}`), {
     method: 'GET',
     headers: { 'x-user-id': params.userId },
@@ -209,7 +229,10 @@ export async function getExpenseApi(params: { expenseId: string; userId: string 
   });
 }
 
-export async function deleteExpenseApi(params: { expenseId: string; userId: string }): Promise<void> {
+export async function deleteExpenseApi(params: {
+  expenseId: string;
+  userId: string;
+}): Promise<void> {
   const res = await fetch(expensesUrl(`expenses/${encodeURIComponent(params.expenseId)}`), {
     method: 'DELETE',
     headers: { 'x-user-id': params.userId },
