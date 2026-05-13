@@ -21,6 +21,11 @@ function hydrateUser(): User {
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User>(hydrateUser);
+  const [isBooting, setIsBooting] = useState<boolean>(() => {
+    const state = loadAuth();
+    if (state.status === 'logged_in') return false;
+    return !!loadAccessToken();
+  });
 
   /**
    * 일부 배포/콜백 경로에서 accessToken만 저장되고 `tt_auth_v2` 프로필이 비는 경우 복구.
@@ -29,9 +34,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let cancelled = false;
     const state = loadAuth();
-    if (state.status === 'logged_in') return;
+    if (state.status === 'logged_in') {
+      setIsBooting(false);
+      return;
+    }
     const token = loadAccessToken();
-    if (!token) return;
+    if (!token) {
+      setIsBooting(false);
+      return;
+    }
 
     void (async () => {
       try {
@@ -42,6 +53,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(next);
       } catch {
         // 토큰 무효 등 — 그대로 비로그인
+      } finally {
+        if (!cancelled) setIsBooting(false);
       }
     })();
 
@@ -62,6 +75,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     <AuthContext.Provider
       value={{
         user,
+        isBooting,
         login: (next) => {
           setUser(next);
           if (next) {
@@ -69,8 +83,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               status: 'logged_in',
               user: { id: next.id, name: next.name, imageUrl: next.imageUrl },
             });
+            setIsBooting(false);
           } else {
             clearAuth();
+            setIsBooting(false);
           }
         },
         logout: async () => {
@@ -84,6 +100,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
           setUser(null);
           clearAuth();
+          setIsBooting(false);
         },
         withdraw: async () => {
           // 회원 탈퇴 — 백엔드 사용자/연동 데이터 삭제.
@@ -102,6 +119,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           // 탈퇴 후 같은 기기에서 재가입할 때 깨끗한 상태로 시작하도록.
           setUser(null);
           localStorage.clear();
+          setIsBooting(false);
         },
       }}
     >

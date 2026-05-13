@@ -2,7 +2,9 @@ import { Navigate, Outlet } from 'react-router-dom';
 import { useAuth } from '@/features/auth/useAuth';
 
 export function ProtectedRoute() {
-  const { user } = useAuth();
+  const { user, isBooting } = useAuth();
+
+  if (isBooting) return null;
 
   if (!user) {
     const onboardingDone = localStorage.getItem('onboarding_done');
