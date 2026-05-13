@@ -49,6 +49,11 @@ export type ApiEnvelope<T> = {
   timestamp: string;
 };
 
+function hasContentTypeHeader(headers: RequestInit['headers']): boolean {
+  if (!headers) return false;
+  return new Headers(headers).has('Content-Type');
+}
+
 /**
  * API 에러 (status, code 보존).
  * caller가 특정 에러 코드 (USER_NOT_FOUND, WITHDRAWAL_FAILED 등)를 분기 처리할 때 사용.
@@ -132,13 +137,14 @@ async function refreshAccessToken(): Promise<string | null> {
  */
 export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const url = buildUrl(path);
+  const needsDefaultJsonContentType = !hasContentTypeHeader(init?.headers);
 
   const send = async (token: string | null) => {
     return fetch(url, {
       ...init,
       credentials: 'include',
       headers: {
-        'Content-Type': 'application/json',
+        ...(needsDefaultJsonContentType ? { 'Content-Type': 'application/json' } : {}),
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
         ...(init?.headers ?? {}),
       },
@@ -169,4 +175,34 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
     return (body as ApiEnvelope<T>).data as T;
   }
   return body as T;
+}
+
+/**
+ * 응답 본문/상태를 직접 다뤄야 하는 API용 raw fetch 래퍼.
+ * - Authorization/refresh 동작은 apiFetch와 동일
+ * - Content-Type은 강제 주입하지 않음(FormData 업로드용)
+ */
+export async function apiFetchRaw(path: string, init?: RequestInit): Promise<Response> {
+  const url = buildUrl(path);
+
+  const send = async (token: string | null) => {
+    return fetch(url, {
+      ...init,
+      credentials: 'include',
+      headers: {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(init?.headers ?? {}),
+      },
+    });
+  };
+
+  let res = await send(localStorage.getItem(TOKEN_KEY));
+  const skipRefresh = path.includes('/auth/refresh') || path.includes('/auth/logout');
+  if (res.status === 401 && !skipRefresh) {
+    const newToken = await refreshAccessToken();
+    if (newToken) {
+      res = await send(newToken);
+    }
+  }
+  return res;
 }

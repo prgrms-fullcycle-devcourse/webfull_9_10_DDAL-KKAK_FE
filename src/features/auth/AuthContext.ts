@@ -9,6 +9,7 @@ export type User = {
 
 export type AuthCtx = {
   user: User;
+  isBooting: boolean;
   login: (user: User) => void;
   /**
    * 백엔드에 로그아웃 알리고 (refreshToken 파기) 로컬 상태 정리.
