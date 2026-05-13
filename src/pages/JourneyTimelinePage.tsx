@@ -26,12 +26,14 @@ export function JourneyTimelinePage() {
   const { user } = useAuth();
 
   const { data: journeyRaw } = useJourneyQuery(journeyId);
-  // API가 budgetKRW / fixedExchangeRate를 반환하지 않으므로 localStorage·demo 값으로 보완
+
   const journey = useMemo(() => {
     if (!journeyRaw) return journeyRaw;
     let j = journeyRaw;
-    // 환율: 백엔드가 rate=1로 내려오면 demo 기준값으로 보완
-    if (j.rate === 1 && j.currency !== 'KRW') {
+    // FIXED·REALTIME 모두 journey.rate 사용.
+    // 여행 생성·수정 시 live rate가 DB에 저장되므로 재조회 불필요.
+    // 단, 백엔드가 rate를 누락해 1로 내려오면 demo 값으로 보완.
+    if (j.currency !== 'KRW' && j.rate <= 1) {
       j = { ...j, rate: demoRateForCurrency(j.currency) };
     }
     // 예산
@@ -360,13 +362,13 @@ export function JourneyTimelinePage() {
                               <span className="ml-0.5 text-xs font-bold">{journey.currency}</span>
                             </p>
                             <p className="mt-1 text-[10px] font-bold tracking-tighter text-slate-300">
-                              약 {formatKRW(Math.round(e.amountLocal * (e.fxRateTripToKrw ?? journey.rate)))}원
+                              약 {formatKRW(Math.round(e.amountLocal * (journey.rateMode === 'fixed' ? journey.rate : (e.fxRateTripToKrw ?? journey.rate))))}원
                             </p>
                             {isShared ? (
                               <p className="mt-1 text-[10px] font-bold tracking-tighter text-blue-500">
                                 🏷️ {formatLocal(myShare)} {journey.currency}
                                 <span className="ml-1 text-slate-400">
-                                  (약 {formatKRW(Math.round(myShare * (e.fxRateTripToKrw ?? journey.rate)))}원)
+                                  (약 {formatKRW(Math.round(myShare * (journey.rateMode === 'fixed' ? journey.rate : (e.fxRateTripToKrw ?? journey.rate))))}원)
                                 </span>
                               </p>
                             ) : null}
