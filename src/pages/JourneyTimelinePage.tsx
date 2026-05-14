@@ -8,6 +8,7 @@ import { useExpensesQuery } from '@/features/expenses/queries';
 import { useJourneyQuery } from '@/features/journeys/queries';
 import { expenseMyShareLocal, sumMySpendKRW, sumMySpendLocal } from '@/features/settlement/calc';
 import { dateKeyOf, timeLabelOf } from '@/lib/datetime';
+import { demoRateForCurrency } from '@/lib/currencyRates';
 import { formatKRW, formatLocal } from '@/lib/money';
 
 /** 'YYYY-MM-DD' wall-clock 기준 일차 계산 (1일차부터). */
@@ -23,8 +24,32 @@ export function JourneyTimelinePage() {
   const { journeyId } = useParams();
   const { user } = useAuth();
 
-  const { data: journey } = useJourneyQuery(journeyId);
-  const { data: expenses = [] } = useExpensesQuery(journeyId, user?.id, journey?.participantIdsByName);
+  const { data: journeyRaw } = useJourneyQuery(journeyId);
+
+  const journey = useMemo(() => {
+    if (!journeyRaw) return journeyRaw;
+    // FIXED·REALTIME 모두 journey.rate 사용.
+    // 여행 생성·수정 시 live rate가 DB에 저장되므로 재조회 불필요.
+    // 단, 백엔드가 rate를 누락해 1로 내려오면 demo 값으로 보완.
+    if (journeyRaw.currency !== 'KRW' && journeyRaw.rate <= 1) {
+      return { ...journeyRaw, rate: demoRateForCurrency(journeyRaw.currency) };
+    }
+    return journeyRaw;
+  }, [journeyRaw]);
+  const { data: expensesRaw = [] } = useExpensesQuery(journeyId, user?.id);
+
+  // payerParticipantId(UUID) → 이름 역변환 (백엔드가 payer를 UUID로 반환하는 경우 대응)
+  const expenses = useMemo(() => {
+    const idsByName = journey?.participantIdsByName;
+    if (!idsByName || !expensesRaw.length) return expensesRaw;
+    const idToName: Record<string, string> = {};
+    for (const [name, id] of Object.entries(idsByName)) idToName[id] = name;
+    return expensesRaw.map((e) => ({
+      ...e,
+      payer: idToName[e.payer] ?? e.payer,
+      splitWith: e.splitWith?.map((s) => idToName[s] ?? s) ?? e.splitWith,
+    }));
+  }, [expensesRaw, journey]);
 
   const grouped = useMemo(() => {
     const by: Record<string, typeof expenses> = {};
@@ -330,13 +355,31 @@ export function JourneyTimelinePage() {
                               <span className="ml-0.5 text-xs font-bold">{journey.currency}</span>
                             </p>
                             <p className="mt-1 text-[10px] font-bold tracking-tighter text-slate-300">
-                              약 {formatKRW(e.amountLocal * journey.rate)}원
+                              약{' '}
+                              {formatKRW(
+                                Math.round(
+                                  e.amountLocal *
+                                    (journey.rateMode === 'fixed'
+                                      ? journey.rate
+                                      : (e.fxRateTripToKrw ?? journey.rate)),
+                                ),
+                              )}
+                              원
                             </p>
                             {isShared ? (
                               <p className="mt-1 text-[10px] font-bold tracking-tighter text-blue-500">
                                 🏷️ {formatLocal(myShare)} {journey.currency}
                                 <span className="ml-1 text-slate-400">
-                                  (약 {formatKRW(myShare * journey.rate)}원)
+                                  (약{' '}
+                                  {formatKRW(
+                                    Math.round(
+                                      myShare *
+                                        (journey.rateMode === 'fixed'
+                                          ? journey.rate
+                                          : (e.fxRateTripToKrw ?? journey.rate)),
+                                    ),
+                                  )}
+                                  원)
                                 </span>
                               </p>
                             ) : null}

@@ -10,7 +10,7 @@ export function InsightPage() {
   const { journeyId } = useParams();
   const { user } = useAuth();
   const { data: journey } = useJourneyQuery(journeyId);
-  const { data: expenses = [] } = useExpensesQuery(journeyId, user?.id, journey?.participantIdsByName);
+  const { data: expenses = [] } = useExpensesQuery(journeyId, user?.id);
 
   const summary = useMemo(() => {
     if (!expenses.length) return null;
@@ -131,10 +131,7 @@ function InsightSkeleton() {
         {/* 통계 그리드 */}
         <section className="grid grid-cols-2 gap-3">
           {[1, 2, 3, 4].map((i) => (
-            <div
-              key={i}
-              className="animate-pulse rounded-2xl border border-slate-100 bg-white p-4"
-            >
+            <div key={i} className="animate-pulse rounded-2xl border border-slate-100 bg-white p-4">
               <div className="mb-2 h-3 w-16 rounded bg-slate-200" />
               <div className="h-5 w-20 rounded bg-slate-200" />
             </div>

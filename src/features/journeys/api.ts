@@ -1,7 +1,14 @@
 import { apiFetch } from '@/lib/api';
 import type { Journey } from './types';
 import { ApiError } from '@/lib/api';
-import { addJourney, deleteJourney, loadJourneys, updateJourney } from './storage';
+import {
+  addJourney,
+  deleteJourney,
+  loadJourneys,
+  loadParticipantsCache,
+  saveParticipantsCache,
+  updateJourney,
+} from './storage';
 
 type RawParticipant = string | { id?: string; name?: string };
 
@@ -53,6 +60,14 @@ const STATUS_FROM_API: Record<string, Journey['status']> = {
   COMPLETED: 'ended',
 };
 
+const CURRENCY_TO_COUNTRY: Record<string, string> = {
+  KRW: '한국',
+  JPY: '일본',
+  USD: '미국',
+  EUR: '유럽',
+  CNY: '중국',
+};
+
 function normalizeJourney(raw: Journey): Journey {
   const r = raw as unknown as Record<string, unknown>;
 
@@ -86,18 +101,34 @@ function normalizeJourney(raw: Journey): Journey {
     typeof r.startDate === 'string' ? r.startDate.slice(0, 10) : raw.startDate;
   const resolvedEndDate = typeof r.endDate === 'string' ? r.endDate.slice(0, 10) : raw.endDate;
 
+  const resolvedCountry =
+    (typeof r.country === 'string' && r.country.trim()) ||
+    CURRENCY_TO_COUNTRY[resolvedCurrency] ||
+    '한국';
+
   const { participants, participantIdsByName } = participantsFromTripRecord(r);
+
+  // budgetKrw(백엔드 필드명) → budgetKRW(프론트 필드명) 정규화
+  const resolvedBudgetKRW =
+    typeof r.budgetKrw === 'number' && r.budgetKrw > 0
+      ? r.budgetKrw
+      : typeof r.budgetKRW === 'number' && r.budgetKRW > 0
+        ? r.budgetKRW
+        : raw.budgetKRW;
 
   return {
     ...raw,
     name: resolvedName || raw.name,
+    country: resolvedCountry,
     currency: resolvedCurrency as Journey['currency'],
     rate: resolvedRate,
     rateMode: resolvedRateMode,
     status: resolvedStatus,
     startDate: resolvedStartDate,
     endDate: resolvedEndDate,
-    ...(participants.length && { participants }),
+    budgetKRW: resolvedBudgetKRW,
+    // 항상 string[] 보장 — API가 participants 필드를 생략해도 빈 배열로 안전하게 초기화
+    participants,
     ...(Object.keys(participantIdsByName).length && { participantIdsByName }),
   };
 }
@@ -111,6 +142,9 @@ function serializeTrip(input: Partial<Journey> & { name?: string }): Record<stri
   if (input.rate !== undefined) payload.fixedExchangeRate = input.rate;
   if (input.startDate !== undefined) payload.startDate = input.startDate;
   if (input.endDate !== undefined) payload.endDate = input.endDate;
+  // 백엔드 필드명은 budgetKrw (소문자 rw)
+  if (input.budgetKRW !== undefined)
+    payload.budgetKrw = input.budgetKRW > 0 ? input.budgetKRW : null;
 
   return payload;
 }
@@ -149,6 +183,20 @@ async function syncParticipants(
   return next;
 }
 
+/** 정산 요약 등에서 PARTICIPANT_NOT_FOUND가 나지 않도록, 일시 실패 시 한 번 더 시도 */
+async function syncParticipantsWithRetry(
+  tripId: string,
+  existingIds: Record<string, string>,
+  nextNames: string[],
+): Promise<Record<string, string>> {
+  try {
+    return await syncParticipants(tripId, existingIds, nextNames);
+  } catch {
+    await new Promise((r) => setTimeout(r, 500));
+    return await syncParticipants(tripId, existingIds, nextNames);
+  }
+}
+
 /** 토큰 없음 또는 명시 mock → 여행/정산 등은 로컬 스토리지·클라이언트 계산과 동일 기준으로 맞출 것 */
 export function isMockMode(): boolean {
   const hasToken = !!localStorage.getItem('tt_access_token_v1');
@@ -176,7 +224,20 @@ export async function fetchTrip(tripId: string): Promise<Journey> {
   }
   try {
     const trip = await apiFetch<Journey>(`/trips/${tripId}`);
-    return normalizeJourney(trip);
+    const normalized = normalizeJourney(trip);
+
+    // 백엔드가 participants를 비워서 반환하면 localStorage 캐시로 보완
+    if (!normalized.participants.length) {
+      const cached = loadParticipantsCache(tripId);
+      if (cached?.participants.length) {
+        return {
+          ...normalized,
+          participants: cached.participants,
+          participantIdsByName: cached.participantIdsByName,
+        };
+      }
+    }
+    return normalized;
   } catch (e) {
     if (e instanceof ApiError && (e.status === 401 || e.status === 404 || e.status === 501)) {
       const found = loadJourneys().find((j) => j.id === tripId);
@@ -203,17 +264,17 @@ export async function createTrip(input: CreateTripInput): Promise<Journey> {
     });
     const trip = normalizeJourney(created);
 
-    // 여행 생성 후 참여자 개별 등록 (실패해도 여행 생성은 성공으로 처리)
-    if (input.participants?.length) {
-      try {
-        const participantIdsByName = await syncParticipants(trip.id, {}, input.participants);
-        return { ...trip, participants: input.participants, participantIdsByName };
-      } catch {
-        return { ...trip, participants: input.participants };
-      }
+    // 여행 생성 후 참여자 개별 등록 — 백엔드 정산 요약은 DB 참가자 행이 있어야 동작
+    const namesToRegister =
+      input.participants?.length > 0 ? input.participants : [input.selfParticipant?.trim() || '나'];
+    try {
+      const participantIdsByName = await syncParticipantsWithRetry(trip.id, {}, namesToRegister);
+      saveParticipantsCache(trip.id, namesToRegister, participantIdsByName);
+      return { ...trip, participants: namesToRegister, participantIdsByName };
+    } catch {
+      saveParticipantsCache(trip.id, namesToRegister, {});
+      return { ...trip, participants: namesToRegister };
     }
-
-    return trip;
   } catch (e) {
     if (e instanceof ApiError && (e.status === 401 || e.status === 404 || e.status === 501)) {
       const id = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -239,19 +300,34 @@ export async function updateTrip(tripId: string, patch: Partial<Journey>): Promi
     });
     const trip = normalizeJourney(updated);
 
-    // 참여자 diff: 기존 ID 맵과 새 목록 비교
+    // 참여자 diff: 기존 ID 맵과 새 목록 비교 (실패해도 여행 수정은 성공 유지)
     if (patch.participants !== undefined) {
-      const existingIds = patch.participantIdsByName ?? trip.participantIdsByName ?? {};
-      const participantIdsByName = await syncParticipants(tripId, existingIds, patch.participants);
-      return { ...trip, participants: patch.participants, participantIdsByName };
+      try {
+        const existingIds = patch.participantIdsByName ?? trip.participantIdsByName ?? {};
+        const participantIdsByName = await syncParticipantsWithRetry(
+          tripId,
+          existingIds,
+          patch.participants,
+        );
+        saveParticipantsCache(tripId, patch.participants, participantIdsByName);
+        return { ...trip, participants: patch.participants, participantIdsByName };
+      } catch {
+        // 백엔드 API 실패해도 로컬 캐시에는 저장
+        saveParticipantsCache(tripId, patch.participants, patch.participantIdsByName ?? {});
+        return { ...trip, participants: patch.participants };
+      }
     }
 
     return trip;
   } catch (e) {
     if (e instanceof ApiError && (e.status === 401 || e.status === 404 || e.status === 501)) {
+      // 백엔드가 아직 해당 기능을 제공하지 않는(404/501) 데모 환경일 때만 로컬로 폴백.
+      // 인증 모드에서 로컬에 해당 trip이 없으면(=백엔드 source of truth) 원래 에러를 유지한다.
+      const existsInLocal = loadJourneys().some((j) => j.id === tripId);
+      if (!existsInLocal) throw e;
       const list = updateJourney(tripId, patch);
       const updated = list.find((j) => j.id === tripId);
-      if (!updated) throw new Error('여정을 찾을 수 없어요.');
+      if (!updated) throw e;
       return updated;
     }
     throw e;
@@ -267,6 +343,9 @@ export async function deleteTrip(tripId: string): Promise<void> {
     await apiFetch<void>(`/trips/${tripId}`, { method: 'DELETE' });
   } catch (e) {
     if (e instanceof ApiError && (e.status === 401 || e.status === 404 || e.status === 501)) {
+      // updateTrip과 동일: 로컬에 해당 trip이 있을 때만 폴백 삭제.
+      const existsInLocal = loadJourneys().some((j) => j.id === tripId);
+      if (!existsInLocal) throw e;
       deleteJourney(tripId);
       return;
     }

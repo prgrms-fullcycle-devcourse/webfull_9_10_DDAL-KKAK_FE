@@ -3,12 +3,14 @@ import { useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ToastPortal } from '@/components/ui/Toast';
 import { useToast } from '@/components/ui/useToast';
+import { loadAccessToken } from '@/features/auth/auth';
 import { useAuth } from '@/features/auth/useAuth';
 import { buildOcrDraftFromParsed, countryToReceiptLocale } from '@/features/ocr/buildDraftFromOcr';
 import {
   createReceiptOcrJob,
   deleteReceiptOcrJob,
   getOcrErrorMessage,
+  OcrApiError,
   pollReceiptOcrJob,
   validateReceiptFile,
 } from '@/features/ocr/ocrApi';
@@ -26,11 +28,39 @@ export function ScanPage() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const activeReceiptIdRef = useRef<string | null>(null);
 
-  const cleanupActiveOcrJob = async (userId: string) => {
+  const logOcrFailureDev = (
+    error: unknown,
+    requestMeta: { tripId: string; fileSize: number; fileType: string; hasToken: boolean },
+  ) => {
+    if (!import.meta.env.DEV) return;
+    const parsed =
+      error instanceof OcrApiError
+        ? {
+            status: error.status ?? null,
+            code: error.code ?? null,
+            detail: error.detail ?? error.message ?? null,
+          }
+        : {
+            status: null,
+            code: null,
+            detail: error instanceof Error ? error.message : String(error),
+          };
+    console.debug('[OCR] request failed', {
+      request: {
+        tripId: requestMeta.tripId,
+        fileSize: requestMeta.fileSize,
+        fileType: requestMeta.fileType,
+        hasToken: requestMeta.hasToken,
+      },
+      response: parsed,
+    });
+  };
+
+  const cleanupActiveOcrJob = async () => {
     const receiptId = activeReceiptIdRef.current;
     if (!receiptId) return;
     try {
-      await deleteReceiptOcrJob({ receiptId, userId });
+      await deleteReceiptOcrJob({ receiptId });
     } catch {
       // 정리 실패해도 사용자 플로우는 계속 진행
     } finally {
@@ -39,6 +69,10 @@ export function ScanPage() {
   };
 
   const handlePick = async (file: File) => {
+    if (!file || file.size <= 0) {
+      showToast('파일을 다시 선택해 주세요.');
+      return;
+    }
     if (!journeyId || !journey) {
       showToast('여정 정보를 불러오는 중이에요. 잠시 후 다시 시도해 주세요.');
       return;
@@ -46,6 +80,26 @@ export function ScanPage() {
     const uid = user?.id?.trim();
     if (!uid) {
       showToast('로그인이 필요해요.');
+      return;
+    }
+    const token = loadAccessToken()?.trim();
+    if (!token) {
+      if (import.meta.env.DEV) {
+        console.debug('[OCR] request blocked: missing access token', {
+          tripId: journeyId,
+          hasUser: !!uid,
+        });
+      }
+      showToast('로그인이 필요해요.');
+      return;
+    }
+    if (!import.meta.env.DEV && uid === 'demo-user') {
+      showToast('운영 환경에서는 데모 계정으로 OCR을 요청할 수 없어요.');
+      return;
+    }
+    const latestTripId = journey.id?.trim() ?? '';
+    if (!latestTripId || latestTripId !== journeyId) {
+      showToast('여정 정보를 확인해 주세요.');
       return;
     }
 
@@ -62,14 +116,13 @@ export function ScanPage() {
       const receiptLocale = countryToReceiptLocale(journey.country);
       const { receiptId } = await createReceiptOcrJob({
         file,
-        tripId: journeyId,
-        userId: uid,
+        tripId: latestTripId,
         currencyHint: journey.currency,
         receiptLocale,
       });
       activeReceiptIdRef.current = receiptId;
 
-      const job = await pollReceiptOcrJob(receiptId, uid, {
+      const job = await pollReceiptOcrJob(receiptId, {
         intervalMs: 1500,
         maxAttempts: 45,
       });
@@ -77,22 +130,28 @@ export function ScanPage() {
       if (job.status === 'FAILED' || job.status === 'EXPIRED') {
         const msg = job.failure?.detail ?? 'OCR 처리에 실패했어요.';
         showToast(msg);
-        await cleanupActiveOcrJob(uid);
+        await cleanupActiveOcrJob();
         setIsScanning(false);
         return;
       }
 
       if (job.status !== 'SUCCESS' || !job.result) {
         showToast('OCR 결과를 받지 못했어요.');
-        await cleanupActiveOcrJob(uid);
+        await cleanupActiveOcrJob();
         setIsScanning(false);
         return;
       }
 
       const draft = buildOcrDraftFromParsed(journey, job.result);
-      nav(`/journeys/${journeyId}/ocr-preview`, { state: { draft, imageDataUrl, receiptId } });
+      nav(`/journeys/${latestTripId}/ocr-preview`, { state: { draft, imageDataUrl, receiptId } });
     } catch (e) {
-      if (uid) await cleanupActiveOcrJob(uid);
+      logOcrFailureDev(e, {
+        tripId: latestTripId,
+        fileSize: file.size,
+        fileType: file.type || 'unknown',
+        hasToken: !!token,
+      });
+      await cleanupActiveOcrJob();
       showToast(getOcrErrorMessage(e));
     } finally {
       setIsScanning(false);
@@ -106,8 +165,7 @@ export function ScanPage() {
         <button
           type="button"
           onClick={async () => {
-            const uid = user?.id?.trim();
-            if (uid) await cleanupActiveOcrJob(uid);
+            await cleanupActiveOcrJob();
             nav(-1);
           }}
           aria-label="닫기"

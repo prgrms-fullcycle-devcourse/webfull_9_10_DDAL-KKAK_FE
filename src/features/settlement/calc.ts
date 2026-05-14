@@ -34,10 +34,18 @@ export function sumMySpendLocal(journey: Journey, expenses: Expense[]) {
   return expenses.reduce((acc, e) => acc + expenseMyShareLocal(journey, e), 0);
 }
 export function sumMySpendKRW(journey: Journey, expenses: Expense[]) {
-  return sumMySpendLocal(journey, expenses) * journey.rate;
+  return expenses.reduce((acc, e) => {
+    const myShareLocal = expenseMyShareLocal(journey, e);
+    if (myShareLocal === 0) return acc;
+    // FIXED·REALTIME 모두 journey.rate 사용.
+    // FIXED: 사용자가 설정한 고정환율 / REALTIME: 호출 시점에 live rate가 주입된 값
+    return acc + Math.round(myShareLocal * journey.rate);
+  }, 0);
 }
 export function sumTotalKRW(journey: Journey, expenses: Expense[]) {
-  return expenses.reduce((acc, e) => acc + e.amountLocal * journey.rate, 0);
+  return expenses.reduce((acc, e) => {
+    return acc + Math.round(e.amountLocal * journey.rate);
+  }, 0);
 }
 export function sumTotalLocal(expenses: Expense[]) {
   return expenses.reduce((acc, e) => acc + e.amountLocal, 0);

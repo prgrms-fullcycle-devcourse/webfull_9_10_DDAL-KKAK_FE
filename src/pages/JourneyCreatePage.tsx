@@ -61,6 +61,20 @@ export function JourneyCreatePage() {
   const [budgetKRW, setBudgetKRW] = useState<number | ''>('');
   const [hydratedFromId, setHydratedFromId] = useState<string | null>(null);
 
+  // REALTIME 모드 선택 시 /currencies API로 현재 환율 미리 조회
+  const [realtimeRatePreview, setRealtimeRatePreview] = useState<number | null>(null);
+  const [realtimeRateLoading, setRealtimeRateLoading] = useState(false);
+  useEffect(() => {
+    if (rateMode !== 'realtime' || currency === 'KRW') {
+      setRealtimeRatePreview(null);
+      return;
+    }
+    setRealtimeRateLoading(true);
+    getRealtimeRate(currency, 'KRW')
+      .then((r) => { setRealtimeRatePreview(r); setRealtimeRateLoading(false); })
+      .catch(() => { setRealtimeRatePreview(demoRateForCurrency(currency)); setRealtimeRateLoading(false); });
+  }, [rateMode, currency]);
+
   // journeyId 바뀌면 hydrate 플래그 리셋 (effect 대신 렌더 중 비교)
   const [prevJourneyId, setPrevJourneyId] = useState(journeyId);
   if (prevJourneyId !== journeyId) {
@@ -85,14 +99,14 @@ export function JourneyCreatePage() {
         : demoRateForCurrency(existingJourney.currency),
     );
     setDates({ start: existingJourney.startDate, end: existingJourney.endDate });
-    setParticipants(existingJourney.participants.length ? existingJourney.participants : ['나']);
+    setParticipants(existingJourney.participants.length ? existingJourney.participants : [authName || '나']);
     setBudgetKRW(
       typeof existingJourney.budgetKRW === 'number' && existingJourney.budgetKRW > 0
         ? existingJourney.budgetKRW
         : '',
     );
     setHydratedFromId(existingJourney.id);
-  }, [isEdit, existingJourney, hydratedFromId]);
+  }, [isEdit, existingJourney, hydratedFromId, authName]);
 
   // 신규 생성에서만 로그인 사용자명을 참가자 1번으로 prepend.
   // 수정 모드에서는 기존 participants/selfParticipant를 보존해야
@@ -383,10 +397,23 @@ export function JourneyCreatePage() {
             </div>
 
             {rateMode === 'realtime' && (
-              <p className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3 text-[11px] font-bold leading-relaxed text-slate-500">
-                팀에서 정책 확정 후 API로 연결할 예정이에요. 지금은 합계·원화 표시용으로 통화별
-                <span className="text-slate-700"> 데모 기준 환율</span>을 씁니다.
-              </p>
+              <div className="rounded-2xl border border-blue-100 bg-blue-50/60 px-4 py-3">
+                {realtimeRateLoading ? (
+                  <p className="text-[11px] font-bold text-slate-400">환율 조회 중…</p>
+                ) : realtimeRatePreview ? (
+                  <p className="text-[11px] font-bold text-slate-600">
+                    현재 환율{' '}
+                    <span className="text-blue-600 font-black">
+                      1 {currency} = {realtimeRatePreview.toLocaleString('ko-KR', { maximumFractionDigits: 2 })}원
+                    </span>
+                    <span className="ml-1 text-slate-400">(실시간 적용)</span>
+                  </p>
+                ) : (
+                  <p className="text-[11px] font-bold text-slate-500">
+                    지출 추가 시 당시 환율을 자동으로 적용해요.
+                  </p>
+                )}
+              </div>
             )}
 
             {rateMode === 'fixed' && (

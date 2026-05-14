@@ -46,7 +46,7 @@ export function OcrPreviewPage() {
           </p>
           <button
             type="button"
-            onClick={() => nav(`/journeys/${journey.id}/scan`)}
+            onClick={() => nav(`/journeys/${journey.id}/scan`, { replace: true })}
             className="mt-6 w-full rounded-2xl bg-blue-600 py-4 text-sm font-black text-white"
           >
             스캔하러 가기
@@ -64,9 +64,9 @@ export function OcrPreviewPage() {
   };
   const receiptId = state?.receiptId;
   const cleanupReceiptJob = async () => {
-    if (!receiptId || !user?.id) return;
+    if (!receiptId) return;
     try {
-      await deleteReceiptOcrJob({ receiptId, userId: user.id });
+      await deleteReceiptOcrJob({ receiptId });
     } catch {
       // 삭제 실패와 무관하게 이동 동선은 유지
     }
@@ -121,7 +121,8 @@ export function OcrPreviewPage() {
         onBack={() => {
           void (async () => {
             await cleanupReceiptJob();
-            nav(`/journeys/${journey.id}/scan`);
+            // replace: 미리보기를 히스토리에서 빼지 않으면 스캔 화면에서 X(뒤로) 시 다시 미리보기로 돌아감
+            nav(`/journeys/${journey.id}/scan`, { replace: true });
           })();
         }}
       />
@@ -415,7 +416,7 @@ export function OcrPreviewPage() {
           type="button"
           onClick={async () => {
             await cleanupReceiptJob();
-            nav(`/journeys/${journey.id}/scan`);
+            nav(`/journeys/${journey.id}/scan`, { replace: true });
           }}
           className="mt-3 w-full py-2 text-sm font-black text-slate-400"
         >
@@ -424,9 +425,9 @@ export function OcrPreviewPage() {
         <button
           type="button"
           onClick={async () => {
-            if (!receiptId || !user?.id) return;
+            if (!receiptId) return;
             try {
-              await deleteReceiptOcrJob({ receiptId, userId: user.id });
+              await deleteReceiptOcrJob({ receiptId });
               setImageDataUrl(null);
               setDraft({
                 storeName: '',
