@@ -146,7 +146,9 @@ export function useUpdateExpenseMutation(userId?: string) {
       patch: Omit<Partial<Expense>, 'receiptId'> & { journeyId: string; receiptId?: string | null };
     }) => {
       await sleep(100);
-      const current = findExpenseById(id);
+      // React Query 캐시 우선 조회 → 없으면 로컬 스토리지
+      // (백엔드 CUID로 저장된 지출은 localStorage에 없을 수 있음)
+      const current = qc.getQueryData<Expense>(['expense', id]) ?? findExpenseById(id);
       if (!current) throw new Error('소비 내역을 찾을 수 없어요.');
       const fallback: Expense = {
         ...current,
