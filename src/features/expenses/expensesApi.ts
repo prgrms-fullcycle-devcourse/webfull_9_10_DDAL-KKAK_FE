@@ -137,10 +137,15 @@ function fromApiExpense(raw: unknown, fallback: Expense): Expense {
         : typeof raw.payerParticipantId === 'string'
           ? raw.payerParticipantId
           : fallback.payer,
+    splitMode:
+      raw.splitMode === 'shared' || raw.splitMode === 'personal'
+        ? raw.splitMode
+        : fallback.splitMode,
     // splitWith: 백엔드가 반환하면 사용, 없으면 fallback
     splitWith: Array.isArray(raw.splitWith)
       ? (raw.splitWith as unknown[]).filter((s): s is string => typeof s === 'string')
       : fallback.splitWith,
+    method: typeof raw.method === 'string' ? (raw.method as Expense['method']) : fallback.method,
     comment: typeof raw.note === 'string' ? raw.note : fallback.comment,
     fxMode: raw.fxMode === 'FIXED' || raw.fxMode === 'REALTIME' ? raw.fxMode : fallback.fxMode,
     fxRateTripToKrw:
