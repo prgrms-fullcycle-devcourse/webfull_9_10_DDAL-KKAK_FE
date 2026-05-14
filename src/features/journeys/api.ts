@@ -245,6 +245,16 @@ export async function fetchTrip(tripId: string): Promise<Journey> {
         };
       }
     }
+    // 이름만 있고 id 맵이 비어 있으면(정산·지출 POST에 필요) 참가자 캐시로 보완
+    if (
+      normalized.participants.length > 0 &&
+      Object.keys(normalized.participantIdsByName ?? {}).length === 0
+    ) {
+      const cached = loadParticipantsCache(tripId);
+      if (cached && Object.keys(cached.participantIdsByName).length > 0) {
+        return { ...normalized, participantIdsByName: cached.participantIdsByName };
+      }
+    }
     return normalized;
   } catch (e) {
     if (e instanceof ApiError && (e.status === 401 || e.status === 404 || e.status === 501)) {
