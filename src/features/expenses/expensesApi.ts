@@ -1,4 +1,5 @@
 import { ApiError, apiFetch } from '@/lib/api';
+import { displayExpenseCategory, toApiExpenseCategory } from '@/features/expenses/expenseCategory';
 import type { Expense } from '@/features/expenses/types';
 
 export class ExpenseApiError extends Error {
@@ -83,7 +84,9 @@ function toExpensePayload(
     payload.splitWith = expense.splitWith;
   if ('method' in expense && expense.method !== undefined) payload.method = expense.method;
   if ('emoji' in expense && expense.emoji !== undefined) payload.emoji = expense.emoji;
-  if ('category' in expense && expense.category !== undefined) payload.category = expense.category;
+  if ('category' in expense && expense.category !== undefined) {
+    payload.category = toApiExpenseCategory(expense.category);
+  }
   return payload;
 }
 
@@ -139,6 +142,10 @@ function fromApiExpense(raw: unknown, fallback: Expense): Expense {
       typeof raw.amountKrw === 'number'
         ? raw.amountKrw
         : Number(raw.amountKrw) || fallback.amountKrw,
+    category:
+      typeof raw.category === 'string'
+        ? displayExpenseCategory(raw.category)
+        : fallback.category,
     updatedAt: typeof raw.updatedAt === 'string' ? raw.updatedAt : fallback.updatedAt,
     createdAt: typeof raw.createdAt === 'string' ? raw.createdAt : fallback.createdAt,
   };
