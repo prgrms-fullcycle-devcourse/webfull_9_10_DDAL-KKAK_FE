@@ -6,7 +6,6 @@ import { TopBar } from '@/components/layout/TopBar';
 import { useAuth } from '@/features/auth/useAuth';
 import { useExpensesQuery } from '@/features/expenses/queries';
 import { useJourneyQuery } from '@/features/journeys/queries';
-import { loadBudget } from '@/features/journeys/storage';
 import { expenseMyShareLocal, sumMySpendKRW, sumMySpendLocal } from '@/features/settlement/calc';
 import { dateKeyOf, timeLabelOf } from '@/lib/datetime';
 import { demoRateForCurrency } from '@/lib/currencyRates';
@@ -29,19 +28,13 @@ export function JourneyTimelinePage() {
 
   const journey = useMemo(() => {
     if (!journeyRaw) return journeyRaw;
-    let j = journeyRaw;
     // FIXED·REALTIME 모두 journey.rate 사용.
     // 여행 생성·수정 시 live rate가 DB에 저장되므로 재조회 불필요.
     // 단, 백엔드가 rate를 누락해 1로 내려오면 demo 값으로 보완.
-    if (j.currency !== 'KRW' && j.rate <= 1) {
-      j = { ...j, rate: demoRateForCurrency(j.currency) };
+    if (journeyRaw.currency !== 'KRW' && journeyRaw.rate <= 1) {
+      return { ...journeyRaw, rate: demoRateForCurrency(journeyRaw.currency) };
     }
-    // 예산
-    if (j.budgetKRW == null) {
-      const stored = loadBudget(j.id);
-      if (stored !== undefined) j = { ...j, budgetKRW: stored };
-    }
-    return j;
+    return journeyRaw;
   }, [journeyRaw]);
   const { data: expensesRaw = [] } = useExpensesQuery(journeyId, user?.id);
 
