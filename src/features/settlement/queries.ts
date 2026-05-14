@@ -10,7 +10,13 @@ import {
   type SettlementData,
   type SettlementSummaryData,
 } from './api';
-import { calcSettlement, ledgerSelfName, splitNamesForExpense, sumMySpendLocal, sumMySpendKRW } from './calc';
+import {
+  calcSettlement,
+  ledgerSelfName,
+  splitNamesForExpense,
+  sumMySpendLocal,
+  sumMySpendKRW,
+} from './calc';
 
 /** 백엔드에 `GET …/settlement/summary`가 없을 때 매번 404가 찍히는 것을 줄이기 위해, 한 번 404면 이 SPA 세션에서는 요청 생략. */
 const settlementSummaryUseLocalOnly = new Set<string>();
@@ -29,10 +35,7 @@ function shouldSkipSettlementSummaryFetch(tripId: string): boolean {
  * 정산 API 404 등 로컬 폴백 시, API로만 존재하는 여행은 loadJourneys()에 없을 수 있음.
  * React Query 캐시 → 로컬 스토리지 → (인증 모드) GET /trips/:id 순으로 해결.
  */
-async function resolveJourneyForLocalFallback(
-  qc: QueryClient,
-  tripId: string,
-): Promise<Journey> {
+async function resolveJourneyForLocalFallback(qc: QueryClient, tripId: string): Promise<Journey> {
   const cached = qc.getQueryData<Journey>(['journeys', tripId]);
   if (cached) return cached;
   const local = loadJourneys().find((j) => j.id === tripId);
@@ -99,11 +102,12 @@ function buildLocalSettlement(tripId: string): SettlementData {
 }
 
 /** 최종 정산 결과 조회 — 데모 모드면 localStorage, 인증 모드면 백엔드 API. */
-export function useSettlementQuery(tripId: string | undefined) {
+export function useSettlementQuery(tripId: string | undefined, options?: { enabled?: boolean }) {
   const qc = useQueryClient();
+  const extraEnabled = options?.enabled ?? true;
   return useQuery({
     queryKey: ['settlement', tripId],
-    enabled: !!tripId,
+    enabled: !!tripId && extraEnabled,
     queryFn: async (): Promise<SettlementData> => {
       if (isMockMode()) {
         await new Promise((r) => setTimeout(r, 100));
@@ -112,7 +116,11 @@ export function useSettlementQuery(tripId: string | undefined) {
       try {
         return await fetchSettlement(tripId!);
       } catch (e) {
-        if (e instanceof ApiError && (e.status === 404 || e.status === 501)) {
+        // 로컬 백엔드에 정산 라우트가 없거나(404)·권한/토큰(401·403)일 때도, 타임라인 캐시·로컬 여정이 있으면 클라이언트 정산표로 폴백
+        if (
+          e instanceof ApiError &&
+          (e.status === 404 || e.status === 501 || e.status === 401 || e.status === 403)
+        ) {
           const raw = await resolveJourneyForLocalFallback(qc, tripId!);
           return buildLocalSettlementFromJourney(raw);
         }
