@@ -17,19 +17,29 @@ import {
 } from '@/features/expenses/storage';
 import { fetchTrips } from '@/features/journeys/api';
 import type { Journey } from '@/features/journeys/types';
-import { loadJourneys } from '@/features/journeys/storage';
 import { isDemoLocalOnlyJourneyId } from '@/mocks/data';
 
 async function sleep(ms: number) {
   await new Promise((r) => setTimeout(r, ms));
 }
 
-function shouldUseExpenseFallback(): boolean {
-  return import.meta.env.DEV || import.meta.env.VITE_USE_MOCK === 'true';
-}
-
+/**
+ * 백엔드 인증 토큰 존재 여부.
+ * journey queries(hasBackendAuth)와 동일 기준으로 맞춤.
+ */
 function hasBackendAuth(): boolean {
   return !!localStorage.getItem('tt_access_token_v1');
+}
+
+/**
+ * API가 아직 준비되지 않은 상태 (인증 실패·미구현·지원 안 함).
+ * 이 경우 로컬 스토리지 폴백 허용.
+ */
+function isApiNotAvailable(error: unknown): boolean {
+  return (
+    error instanceof ExpenseApiError &&
+    (error.status === 401 || error.status === 404 || error.status === 501)
+  );
 }
 
 export function useExpensesQuery(journeyId: string | undefined, userId?: string) {
@@ -39,18 +49,14 @@ export function useExpensesQuery(journeyId: string | undefined, userId?: string)
     queryFn: async (): Promise<Expense[]> => {
       await sleep(80);
       if (!journeyId) return [];
-      if (!userId) return loadAllExpenses().filter((e) => e.journeyId === journeyId);
-      if (hasBackendAuth() && isDemoLocalOnlyJourneyId(journeyId)) {
+      // 로그인 안 됨 또는 데모 전용 여정 → 로컬 스토리지
+      if (!userId || !hasBackendAuth() || isDemoLocalOnlyJourneyId(journeyId)) {
         return loadAllExpenses().filter((e) => e.journeyId === journeyId);
       }
       try {
-        return await listExpensesApi({ tripId: journeyId, userId });
+        return await listExpensesApi({ tripId: journeyId });
       } catch (error) {
-        if (
-          shouldUseExpenseFallback() &&
-          error instanceof ExpenseApiError &&
-          error.status === 404
-        ) {
+        if (isApiNotAvailable(error)) {
           return loadAllExpenses().filter((e) => e.journeyId === journeyId);
         }
         throw error;
@@ -65,31 +71,17 @@ export function useAllExpensesQuery(userId?: string) {
     queryKey: ['expenses'],
     queryFn: async (): Promise<Expense[]> => {
       await sleep(80);
-      if (!userId) return loadAllExpenses();
+      if (!userId || !hasBackendAuth()) return loadAllExpenses();
       try {
-        let trips: Journey[];
-        if (hasBackendAuth()) {
-          const cached = qc.getQueryData<Journey[]>(['journeys']);
-          trips = cached !== undefined ? cached : await fetchTrips();
-        } else {
-          trips = loadJourneys();
-        }
-        const tripIds = trips
-          .map((j) => j.id)
-          .filter((id) => !(hasBackendAuth() && isDemoLocalOnlyJourneyId(id)));
+        // 캐시된 여정 목록 우선 사용, 없으면 API 조회
+        const cached = qc.getQueryData<Journey[]>(['journeys']);
+        const trips = cached !== undefined ? cached : await fetchTrips();
+        const tripIds = trips.map((j) => j.id).filter((id) => !isDemoLocalOnlyJourneyId(id));
         if (tripIds.length === 0) return [];
-        const rows = await Promise.all(
-          tripIds.map((tripId) => listExpensesApi({ tripId, userId })),
-        );
+        const rows = await Promise.all(tripIds.map((tripId) => listExpensesApi({ tripId })));
         return rows.flat();
       } catch (error) {
-        if (
-          shouldUseExpenseFallback() &&
-          error instanceof ExpenseApiError &&
-          error.status === 404
-        ) {
-          return loadAllExpenses();
-        }
+        if (isApiNotAvailable(error)) return loadAllExpenses();
         throw error;
       }
     },
@@ -101,19 +93,17 @@ export function useAddExpenseMutation(userId?: string) {
   return useMutation({
     mutationFn: async (expense: Expense) => {
       await sleep(100);
-      if (!userId) {
+      if (!userId || !hasBackendAuth()) {
         return addExpense(expense).find((e) => e.id === expense.id) ?? expense;
       }
       try {
-        return await createExpenseApi({ expense, userId });
+        return await createExpenseApi({ expense });
       } catch (error) {
-        if (
-          !(shouldUseExpenseFallback() && error instanceof ExpenseApiError && error.status === 404)
-        ) {
-          throw error;
+        if (isApiNotAvailable(error)) {
+          // 백엔드 미구현 환경에서는 로컬 저장으로 폴백
+          return addExpense(expense).find((e) => e.id === expense.id) ?? expense;
         }
-        // 백엔드 /expenses 미구현(404) 환경에서는 로컬 저장으로 폴백
-        return addExpense(expense).find((e) => e.id === expense.id) ?? expense;
+        throw error;
       }
     },
     onSuccess: (saved) => {
@@ -130,19 +120,12 @@ export function useExpenseQuery(expenseId: string | undefined, userId?: string) 
     enabled: !!expenseId,
     queryFn: async (): Promise<Expense> => {
       await sleep(80);
-      if (expenseId && userId) {
+      if (expenseId && userId && hasBackendAuth()) {
         try {
-          return await getExpenseApi({ expenseId, userId });
+          return await getExpenseApi({ expenseId });
         } catch (error) {
-          if (
-            !(
-              shouldUseExpenseFallback() &&
-              error instanceof ExpenseApiError &&
-              error.status === 404
-            )
-          ) {
-            throw error;
-          }
+          if (!isApiNotAvailable(error)) throw error;
+          // 폴백: 로컬 스토리지
         }
       }
       const found = findExpenseById(expenseId!);
@@ -177,20 +160,12 @@ export function useUpdateExpenseMutation(userId?: string) {
               : patch.receiptId,
         updatedAt: new Date().toISOString(),
       };
-      if (userId) {
+      if (userId && hasBackendAuth()) {
         try {
-          return await patchExpenseApi({ expenseId: id, patch, fallback, userId });
+          return await patchExpenseApi({ expenseId: id, patch, fallback });
         } catch (error) {
-          if (
-            !(
-              shouldUseExpenseFallback() &&
-              error instanceof ExpenseApiError &&
-              error.status === 404
-            )
-          ) {
-            throw error;
-          }
-          // 백엔드 /expenses 미구현(404) 환경에서는 로컬 저장으로 폴백
+          if (!isApiNotAvailable(error)) throw error;
+          // 폴백: 로컬 저장
         }
       }
       const storagePatch: Partial<Expense> = {
@@ -213,19 +188,12 @@ export function useDeleteExpenseMutation(userId?: string) {
   return useMutation({
     mutationFn: async ({ id, journeyId }: { id: string; journeyId: string }) => {
       await sleep(100);
-      if (userId) {
+      if (userId && hasBackendAuth()) {
         try {
-          await deleteExpenseApi({ expenseId: id, userId });
+          await deleteExpenseApi({ expenseId: id });
         } catch (error) {
-          if (
-            !(
-              shouldUseExpenseFallback() &&
-              error instanceof ExpenseApiError &&
-              error.status === 404
-            )
-          ) {
-            throw error;
-          }
+          if (!isApiNotAvailable(error)) throw error;
+          // 폴백: 로컬 삭제로 진행
         }
       }
       deleteExpense(id);

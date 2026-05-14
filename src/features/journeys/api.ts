@@ -6,9 +6,7 @@ import {
   deleteJourney,
   loadJourneys,
   loadParticipantsCache,
-  loadRateCache,
   saveParticipantsCache,
-  saveRateCache,
   updateJourney,
 } from './storage';
 
@@ -110,6 +108,14 @@ function normalizeJourney(raw: Journey): Journey {
 
   const { participants, participantIdsByName } = participantsFromTripRecord(r);
 
+  // budgetKrw(백엔드 필드명) → budgetKRW(프론트 필드명) 정규화
+  const resolvedBudgetKRW =
+    typeof r.budgetKrw === 'number' && r.budgetKrw > 0
+      ? r.budgetKrw
+      : typeof r.budgetKRW === 'number' && r.budgetKRW > 0
+        ? r.budgetKRW
+        : raw.budgetKRW;
+
   return {
     ...raw,
     name: resolvedName || raw.name,
@@ -120,6 +126,7 @@ function normalizeJourney(raw: Journey): Journey {
     status: resolvedStatus,
     startDate: resolvedStartDate,
     endDate: resolvedEndDate,
+    budgetKRW: resolvedBudgetKRW,
     // 항상 string[] 보장 — API가 participants 필드를 생략해도 빈 배열로 안전하게 초기화
     participants,
     ...(Object.keys(participantIdsByName).length && { participantIdsByName }),
@@ -135,6 +142,9 @@ function serializeTrip(input: Partial<Journey> & { name?: string }): Record<stri
   if (input.rate !== undefined) payload.fixedExchangeRate = input.rate;
   if (input.startDate !== undefined) payload.startDate = input.startDate;
   if (input.endDate !== undefined) payload.endDate = input.endDate;
+  // 백엔드 필드명은 budgetKrw (소문자 rw)
+  if (input.budgetKRW !== undefined)
+    payload.budgetKrw = input.budgetKRW > 0 ? input.budgetKRW : null;
 
   return payload;
 }
@@ -214,19 +224,7 @@ export async function fetchTrip(tripId: string): Promise<Journey> {
   }
   try {
     const trip = await apiFetch<Journey>(`/trips/${tripId}`);
-    let normalized = normalizeJourney(trip);
-
-    // 백엔드가 fixedExchangeRate를 반환하지 않으면 localStorage 캐시로 보완
-    if (normalized.rate === 1 && normalized.currency !== 'KRW') {
-      const cachedRate = loadRateCache(tripId);
-      if (cachedRate && cachedRate.rate > 1) {
-        normalized = {
-          ...normalized,
-          rate: cachedRate.rate,
-          rateMode: cachedRate.rateMode as Journey['rateMode'],
-        };
-      }
-    }
+    const normalized = normalizeJourney(trip);
 
     // 백엔드가 participants를 비워서 반환하면 localStorage 캐시로 보완
     if (!normalized.participants.length) {
@@ -266,16 +264,9 @@ export async function createTrip(input: CreateTripInput): Promise<Journey> {
     });
     const trip = normalizeJourney(created);
 
-    // 환율 캐시 저장 (백엔드가 fixedExchangeRate를 내려주지 않을 때 대비)
-    if (input.rate && input.rate > 1) {
-      saveRateCache(trip.id, input.rate, input.rateMode ?? 'fixed');
-    }
-
     // 여행 생성 후 참여자 개별 등록 — 백엔드 정산 요약은 DB 참가자 행이 있어야 동작
     const namesToRegister =
-      input.participants?.length > 0
-        ? input.participants
-        : [input.selfParticipant?.trim() || '나'];
+      input.participants?.length > 0 ? input.participants : [input.selfParticipant?.trim() || '나'];
     try {
       const participantIdsByName = await syncParticipantsWithRetry(trip.id, {}, namesToRegister);
       saveParticipantsCache(trip.id, namesToRegister, participantIdsByName);
@@ -308,12 +299,6 @@ export async function updateTrip(tripId: string, patch: Partial<Journey>): Promi
       body: JSON.stringify(serializeTrip(patch)),
     });
     const trip = normalizeJourney(updated);
-
-    // 환율 캐시 저장 (백엔드가 fixedExchangeRate를 내려주지 않을 때 대비)
-    const patchedRate = patch.rate ?? trip.rate;
-    if (patchedRate && patchedRate > 1) {
-      saveRateCache(tripId, patchedRate, patch.rateMode ?? trip.rateMode);
-    }
 
     // 참여자 diff: 기존 ID 맵과 새 목록 비교 (실패해도 여행 수정은 성공 유지)
     if (patch.participants !== undefined) {
