@@ -10,8 +10,15 @@ export function ledgerSelfName(journey: Journey): string {
   return '나';
 }
 
+export function splitNamesForExpense(expense: Expense): string[] {
+  if (expense.splitWithParticipants && expense.splitWithParticipants.length > 0) {
+    return expense.splitWithParticipants.map((p) => p.name);
+  }
+  return expense.splitWith;
+}
+
 function sharedSplitPeople(journey: Journey, expense: Expense): string[] {
-  const sw = expense.splitWith.filter((p) => journey.participants.includes(p));
+  const sw = splitNamesForExpense(expense).filter((p) => journey.participants.includes(p));
   return sw.length ? sw : journey.participants.length ? journey.participants : ['나'];
 }
 

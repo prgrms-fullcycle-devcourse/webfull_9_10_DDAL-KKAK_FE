@@ -46,8 +46,11 @@ export function JourneyTimelinePage() {
     for (const [name, id] of Object.entries(idsByName)) idToName[id] = name;
     return expensesRaw.map((e) => ({
       ...e,
-      payer: idToName[e.payer] ?? e.payer,
-      splitWith: e.splitWith?.map((s) => idToName[s] ?? s) ?? e.splitWith,
+      payer: e.payerName?.trim() || idToName[e.payer] || e.payer,
+      splitWith:
+        e.splitWithParticipants && e.splitWithParticipants.length > 0
+          ? e.splitWithParticipants.map((p) => p.name)
+          : (e.splitWith?.map((s) => idToName[s] ?? s) ?? e.splitWith),
     }));
   }, [expensesRaw, journey]);
 
@@ -345,7 +348,8 @@ export function JourneyTimelinePage() {
                               </div>
                               <p className="flex items-center text-[10px] font-bold uppercase tracking-tighter text-slate-300">
                                 <Clock className="mr-1 size-3" /> {timeLabelOf(e.paidAt)} •{' '}
-                                <UserIcon className="mx-1 size-3" /> 결제자: {e.payer}
+                                <UserIcon className="mx-1 size-3" /> 결제자:{' '}
+                                {e.payerName?.trim() || e.payer}
                               </p>
                             </div>
                           </div>

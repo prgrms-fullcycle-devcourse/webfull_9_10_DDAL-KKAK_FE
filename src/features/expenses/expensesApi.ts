@@ -1,6 +1,6 @@
 import { ApiError, apiFetch } from '@/lib/api';
 import { displayExpenseCategory, toApiExpenseCategory } from '@/features/expenses/expenseCategory';
-import type { Expense } from '@/features/expenses/types';
+import type { Expense, ExpenseSplitParticipant } from '@/features/expenses/types';
 
 export class ExpenseApiError extends Error {
   code?: string;
@@ -41,11 +41,61 @@ function toExpenseApiError(error: unknown, fallbackMessage: string): ExpenseApiE
   return new ExpenseApiError(fallbackMessage);
 }
 
+function parseSplitWithFromApi(raw: unknown): {
+  names: string[];
+  participants?: ExpenseSplitParticipant[];
+} {
+  if (!Array.isArray(raw) || raw.length === 0) return { names: [] };
+  const first = raw[0];
+  if (
+    typeof first === 'object' &&
+    first !== null &&
+    typeof (first as { participantId?: unknown }).participantId === 'string' &&
+    typeof (first as { name?: unknown }).name === 'string'
+  ) {
+    const participants = (raw as { participantId: string; name: string }[])
+      .filter((x) => typeof x.participantId === 'string' && typeof x.name === 'string')
+      .map((x) => ({ participantId: x.participantId, name: x.name }));
+    return { names: participants.map((p) => p.name), participants };
+  }
+  const names = (raw as unknown[]).filter((s): s is string => typeof s === 'string');
+  return { names };
+}
+
+/** toExpensePayload / 분담 id 계산 공통 입력 (PATCH 시 receiptId에 null 허용) */
+type ExpensePayloadInput =
+  | Expense
+  | (Partial<Expense> & { journeyId: string })
+  | (Omit<Partial<Expense>, 'receiptId'> & { journeyId: string; receiptId?: string | null });
+
+/** POST/PATCH: splitWithParticipantIds — 이름→id 맵이 있을 때만 채움(없으면 키 생략). */
+function splitWithParticipantIdsForPayload(
+  expense: ExpensePayloadInput,
+  nameToParticipantId?: Record<string, string>,
+): { participantId: string }[] | undefined {
+  if (!('splitMode' in expense) || expense.splitMode === undefined) return undefined;
+
+  if (expense.splitMode === 'personal') {
+    const pid = expense.payerParticipantId?.trim();
+    if (pid) return [{ participantId: pid }];
+    if (nameToParticipantId && expense.payer) {
+      const id = nameToParticipantId[expense.payer];
+      if (id) return [{ participantId: id }];
+    }
+    return [];
+  }
+
+  const names = expense.splitWith;
+  if (!Array.isArray(names) || names.length === 0) return undefined;
+  if (!nameToParticipantId) return undefined;
+  const ids = [...new Set(names.map((n) => nameToParticipantId[n]).filter(Boolean))] as string[];
+  if (ids.length === 0) return undefined;
+  return ids.map((participantId) => ({ participantId }));
+}
+
 function toExpensePayload(
-  expense:
-    | Expense
-    | (Partial<Expense> & { journeyId: string })
-    | (Omit<Partial<Expense>, 'receiptId'> & { journeyId: string; receiptId?: string | null }),
+  expense: ExpensePayloadInput,
+  opts?: { nameToParticipantId?: Record<string, string> },
 ) {
   const amountOriginal =
     'amountLocal' in expense && expense.amountLocal !== undefined
@@ -87,8 +137,8 @@ function toExpensePayload(
   if ('fxMode' in expense && expense.fxMode !== undefined) payload.fxMode = expense.fxMode;
   if ('splitMode' in expense && expense.splitMode !== undefined)
     payload.splitMode = expense.splitMode;
-  if ('splitWith' in expense && expense.splitWith !== undefined)
-    payload.splitWith = expense.splitWith;
+  const splitIds = splitWithParticipantIdsForPayload(expense, opts?.nameToParticipantId);
+  if (splitIds !== undefined) payload.splitWithParticipantIds = splitIds;
   if ('method' in expense && expense.method !== undefined) payload.method = expense.method;
   if ('emoji' in expense && expense.emoji !== undefined) payload.emoji = expense.emoji;
   // 카테고리: 한국어·영문 모두 백엔드 enum으로 변환 (expenseCategory.ts)
@@ -129,6 +179,10 @@ function fromApiExpense(raw: unknown, fallback: Expense): Expense {
       typeof raw.payerParticipantId === 'string'
         ? raw.payerParticipantId
         : fallback.payerParticipantId,
+    payerName:
+      typeof raw.payerName === 'string' && raw.payerName.trim()
+        ? raw.payerName.trim()
+        : fallback.payerName,
     // payer: payerName(우선) → payerParticipantId → fallback 순. payerParticipantId만 있으면
     // 이름 역변환은 JourneyTimelinePage에서 수행.
     payer:
@@ -141,10 +195,13 @@ function fromApiExpense(raw: unknown, fallback: Expense): Expense {
       raw.splitMode === 'shared' || raw.splitMode === 'personal'
         ? raw.splitMode
         : fallback.splitMode,
-    // splitWith: 백엔드가 반환하면 사용, 없으면 fallback
-    splitWith: Array.isArray(raw.splitWith)
-      ? (raw.splitWith as unknown[]).filter((s): s is string => typeof s === 'string')
-      : fallback.splitWith,
+    ...(() => {
+      const parsed = parseSplitWithFromApi(raw.splitWith);
+      return {
+        splitWithParticipants: parsed.participants,
+        splitWith: parsed.names.length ? parsed.names : fallback.splitWith,
+      };
+    })(),
     method: typeof raw.method === 'string' ? (raw.method as Expense['method']) : fallback.method,
     comment: typeof raw.note === 'string' ? raw.note : fallback.comment,
     fxMode: raw.fxMode === 'FIXED' || raw.fxMode === 'REALTIME' ? raw.fxMode : fallback.fxMode,
@@ -234,12 +291,17 @@ export async function deleteExpenseApi(params: { expenseId: string }): Promise<v
   }
 }
 
-export async function createExpenseApi(params: { expense: Expense }): Promise<Expense> {
+export async function createExpenseApi(params: {
+  expense: Expense;
+  nameToParticipantId?: Record<string, string>;
+}): Promise<Expense> {
   let data: unknown;
   try {
     data = await apiFetch<unknown>('/expenses', {
       method: 'POST',
-      body: JSON.stringify(toExpensePayload(params.expense)),
+      body: JSON.stringify(
+        toExpensePayload(params.expense, { nameToParticipantId: params.nameToParticipantId }),
+      ),
     });
   } catch (error) {
     throw toExpenseApiError(error, '지출 생성 실패');
@@ -251,12 +313,15 @@ export async function patchExpenseApi(params: {
   expenseId: string;
   patch: Omit<Partial<Expense>, 'receiptId'> & { journeyId: string; receiptId?: string | null };
   fallback: Expense;
+  nameToParticipantId?: Record<string, string>;
 }): Promise<Expense> {
   let data: unknown;
   try {
     data = await apiFetch<unknown>(`/expenses/${encodeURIComponent(params.expenseId)}`, {
       method: 'PATCH',
-      body: JSON.stringify(toExpensePayload(params.patch)),
+      body: JSON.stringify(
+        toExpensePayload(params.patch, { nameToParticipantId: params.nameToParticipantId }),
+      ),
     });
   } catch (error) {
     throw toExpenseApiError(error, '지출 수정 실패');
