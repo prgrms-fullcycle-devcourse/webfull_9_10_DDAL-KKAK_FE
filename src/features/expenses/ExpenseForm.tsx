@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { Expense } from '@/features/expenses/types';
 import { useJourneyQuery } from '@/features/journeys/queries';
+import { loadParticipantsCache } from '@/features/journeys/storage';
 import {
   useAddExpenseMutation,
   useDeleteExpenseMutation,
@@ -183,8 +184,23 @@ export function ExpenseForm({
 
   const myShareKRW = Math.round(myShareLocal * effectiveRate);
   const participants = journey?.participants ?? [];
+
+  /** 지출 POST의 splitWithParticipantIds용 — API가 id 맵을 안 줄 때 캐시·이름 폴백 */
+  const nameToParticipantIdForApi = useMemo((): Record<string, string> | undefined => {
+    if (!journey) return undefined;
+    const fromJ = journey.participantIdsByName;
+    if (fromJ && Object.keys(fromJ).length > 0) return fromJ;
+    const cached = loadParticipantsCache(journey.id);
+    if (cached && Object.keys(cached.participantIdsByName).length > 0)
+      return cached.participantIdsByName;
+    if (journey.participants.length > 0) {
+      return Object.fromEntries(journey.participants.map((n) => [n, n]));
+    }
+    return undefined;
+  }, [journey]);
+
   const resolveParticipantId = (name: string): string => {
-    const byName = journey?.participantIdsByName;
+    const byName = nameToParticipantIdForApi;
     if (!byName) return name;
     return byName[name] ?? name;
   };
@@ -249,13 +265,13 @@ export function ExpenseForm({
         const saved = await updateMut.mutateAsync({
           id: expenseId,
           patch: patchPayload,
-          nameToParticipantId: journey.participantIdsByName,
+          nameToParticipantId: nameToParticipantIdForApi,
         });
         onSaved(saved);
       } else {
         const saved = await addMut.mutateAsync({
           expense: payload,
-          nameToParticipantId: journey.participantIdsByName,
+          nameToParticipantId: nameToParticipantIdForApi,
         });
         onSaved(saved);
       }

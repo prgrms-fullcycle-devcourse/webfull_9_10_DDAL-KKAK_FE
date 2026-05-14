@@ -1,50 +1,102 @@
-import { ArrowRight, Check, ChevronRight, Coins, ImageDown, Sparkles, Users } from 'lucide-react';
+import { ArrowRight, ChevronRight, Coins, ImageDown, Sparkles, Users } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import { useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { TopBar } from '@/components/layout/TopBar';
-import { useJourneyQuery, useUpdateJourneyMutation } from '@/features/journeys/queries';
+import { useJourneyQuery } from '@/features/journeys/queries';
 import { ledgerSelfName } from '@/features/settlement/calc';
 import { useSettlementQuery } from '@/features/settlement/queries';
 import { formatKRW, formatLocal } from '@/lib/money';
+import { stripUnsupportedColorStylesFromClone } from '@/lib/html2canvasSanitize';
+
+function downloadBlob(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.rel = 'noopener';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  // 일부 브라우저는 revoke 직후 다운로드가 끊김 — 약간 늦춤
+  window.setTimeout(() => URL.revokeObjectURL(url), 500);
+}
+
+function downloadDataUrl(dataUrl: string, filename: string): void {
+  const a = document.createElement('a');
+  a.href = dataUrl;
+  a.download = filename;
+  a.rel = 'noopener';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
+
+/** iOS 등에서 `download` 속성이 무시될 때 공유 시트로 넘김 */
+async function deliverPng(blob: Blob, filename: string): Promise<void> {
+  if (typeof navigator !== 'undefined' && navigator.share && typeof File !== 'undefined') {
+    const file = new File([blob], filename, { type: 'image/png' });
+    const payload: ShareData = { files: [file], title: 'Travel Tick 정산 리포트' };
+    if (navigator.canShare?.(payload)) {
+      try {
+        await navigator.share(payload);
+        return;
+      } catch (err) {
+        if (err instanceof DOMException && err.name === 'AbortError') return;
+        // 그 외 오류는 일반 다운로드로 폴백
+      }
+    }
+  }
+  downloadBlob(blob, filename);
+}
 
 export function ReportPage() {
   const nav = useNavigate();
   const { journeyId } = useParams();
-  const { data: journey } = useJourneyQuery(journeyId);
+  const {
+    data: journey,
+    isPending: journeyPending,
+    isError: journeyError,
+    error: journeyErrorObj,
+  } = useJourneyQuery(journeyId);
+  const journeyReady = !!journey && !journeyPending && !journeyError;
   const {
     data: settlement,
     isPending: settlementPending,
     isError: settlementError,
     error: settlementErrorObj,
-  } = useSettlementQuery(journeyId);
+  } = useSettlementQuery(journeyId, { enabled: !!journeyId && journeyReady });
   const reportRef = useRef<HTMLDivElement | null>(null);
   const [isCapturing, setIsCapturing] = useState(false);
-  const updateJourneyMut = useUpdateJourneyMutation();
 
-  // 영속화된 송금 완료 키 (Journey.settledTransferKeys에서 직접 읽음)
-  const doneKeys = new Set(journey?.settledTransferKeys ?? []);
-
-  // 백엔드 송금 식별자: sender.id → receiver.id @ amount
-  const transferKeyOf = (sender: string, receiver: string, amount: number) =>
-    `${sender}->${receiver}@${amount}`;
-
-  const toggleDone = (key: string) => {
-    if (!journey) return;
-    const current = new Set(journey.settledTransferKeys ?? []);
-    if (current.has(key)) {
-      current.delete(key);
-    } else {
-      current.add(key);
-    }
-    updateJourneyMut.mutate({
-      id: journey.id,
-      patch: { settledTransferKeys: Array.from(current) },
-    });
-  };
+  // 여정 로드 실패 — `!journey`만 두면 에러 후에도 스켈레톤에 갇힐 수 있음
+  if (journeyError) {
+    return (
+      <div className="min-h-dvh bg-white">
+        <TopBar title="최종 정산 리포트" backTo={journeyId ? `/journeys/${journeyId}` : '/'} />
+        <main className="grid place-items-center px-6 pt-24">
+          <div className="text-center">
+            <p className="text-sm font-black text-slate-900">여정을 불러올 수 없어요</p>
+            <p className="mt-2 text-xs font-bold text-slate-400">
+              {journeyErrorObj instanceof Error
+                ? journeyErrorObj.message
+                : '로그인·백엔드 주소를 확인해 주세요.'}
+            </p>
+            <button
+              type="button"
+              onClick={() => nav(journeyId ? `/journeys/${journeyId}` : '/')}
+              className="mt-8 cursor-pointer rounded-2xl bg-blue-600 px-6 py-3 text-sm font-black text-white active:scale-95"
+            >
+              돌아가기
+            </button>
+          </div>
+        </main>
+      </div>
+    );
+  }
 
   // 로딩 중 → 스켈레톤
-  if (!journey || settlementPending) return <ReportSkeleton />;
+  if (journeyPending || !journey || settlementPending) return <ReportSkeleton />;
 
   // 정산 API 실패 (403/404/500 등) → 에러 화면
   if (settlementError || !settlement) {
@@ -79,11 +131,7 @@ export function ReportPage() {
   // 현지 통화 환산 — 환율 있으면 보조 표시
   const totalLocal = journey.rate ? totalKRW / journey.rate : null;
 
-  // 송금 진행률 — settledTransferKeys 기준
   const totalTransfers = settlement.remittances.length;
-  const settledTransfers = settlement.remittances.filter((r) =>
-    doneKeys.has(transferKeyOf(r.sender.id, r.receiver.id, r.amount)),
-  ).length;
 
   // 인원별 소비 내역 — API 응답 그대로 사용 (결제 큰 순 정렬)
   const perPerson = [...settlement.settlementSummary]
@@ -110,18 +158,6 @@ export function ReportPage() {
     };
   })();
 
-  const downloadBlob = (blob: Blob, filename: string) => {
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    a.rel = 'noopener';
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
-  };
-
   const handleCapture = async () => {
     const root = reportRef.current;
     if (!root) return;
@@ -129,46 +165,81 @@ export function ReportPage() {
     const filename = `travel-tick-report-${journey.id}.png`;
 
     const tryPlaywrightServer = async (): Promise<boolean> => {
+      // `npm run dev` + Vite 프록시 + screenshot 서버(8787)일 때만 의미 있음.
+      // Vercel 등 배포 호스팅은 이 POST를 받지 않아 405(Method Not Allowed)가 남 — 요청 자체를 보내지 않음.
+      if (!import.meta.env.DEV) return false;
+      const ctrl = new AbortController();
+      const timer = window.setTimeout(() => ctrl.abort(), 8000);
       try {
         const res = await fetch('/__screenshot/report', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ journeyId: journey.id }),
+          signal: ctrl.signal,
         });
         if (!res.ok) return false;
         const ct = res.headers.get('Content-Type') || '';
         if (!ct.includes('image/png')) return false;
         const blob = await res.blob();
-        downloadBlob(blob, filename);
+        await deliverPng(blob, filename);
         return true;
       } catch {
         return false;
+      } finally {
+        window.clearTimeout(timer);
       }
     };
 
     const tryClientCapture = async (): Promise<void> => {
+      const h = root.scrollHeight;
+      const scale = h > 7000 ? 1 : h > 4000 ? 1.5 : 2;
       const canvas = await html2canvas(root, {
-        scale: 2,
+        scale,
         useCORS: true,
         backgroundColor: '#ffffff',
         logging: false,
+        foreignObjectRendering: false,
+        onclone: (clonedDoc) => {
+          stripUnsupportedColorStylesFromClone(clonedDoc);
+        },
       });
       await new Promise<void>((resolve, reject) => {
-        canvas.toBlob((blob) => {
-          if (blob) {
-            downloadBlob(blob, filename);
-            resolve();
-          } else reject(new Error('PNG 변환에 실패했어요.'));
-        }, 'image/png');
+        canvas.toBlob(
+          async (blob) => {
+            if (blob) {
+              await deliverPng(blob, filename);
+              resolve();
+              return;
+            }
+            try {
+              const dataUrl = canvas.toDataURL('image/png');
+              if (dataUrl.length > 100 && dataUrl.startsWith('data:image/png')) {
+                downloadDataUrl(dataUrl, filename);
+                resolve();
+              } else {
+                reject(new Error('PNG 변환에 실패했어요.'));
+              }
+            } catch (e) {
+              reject(e instanceof Error ? e : new Error('PNG 변환에 실패했어요.'));
+            }
+          },
+          'image/png',
+          1,
+        );
       });
     };
 
     try {
       const ok = await tryPlaywrightServer();
       if (!ok) await tryClientCapture();
-    } catch {
+    } catch (e) {
+      const detail = e instanceof Error ? e.message : '';
       alert(
-        '이미지를 저장하지 못했어요. 고화질 캡처는 터미널에서 `npm run dev:screenshot-server`를 띄운 뒤 다시 시도해 주세요.',
+        detail
+          ? `이미지를 저장하지 못했어요.\n${detail}`
+          : !import.meta.env.DEV
+            ? '이미지를 저장하지 못했어요. 배포 환경에서는 브라우저가 화면을 그려 저장합니다. 모바일은「공유」로 사진에 저장해 보시고, 다른 브라우저로도 한 번 시도해 주세요.'
+            : '이미지를 저장하지 못했어요. 브라우저에서 화면을 그리는 데 실패했을 수 있어요. 로컬에서 `npm run dev:screenshot-server`를 켜면 Playwright 고화질 경로를 추가로 시도합니다.',
       );
     } finally {
       setIsCapturing(false);
@@ -237,7 +308,7 @@ export function ReportPage() {
 
           {/* 2. 최적 정산 루트 — 최소 횟수 송금 (와이어프레임 기준) */}
           <section>
-            <div className="mb-3 flex items-end justify-between px-1">
+            <div className="mb-3 px-1">
               <div>
                 <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">
                   최적 정산 루트
@@ -248,11 +319,6 @@ export function ReportPage() {
                     : `최소 ${totalTransfers}번 송금으로 정산 완료`}
                 </p>
               </div>
-              {totalTransfers > 0 ? (
-                <p className="text-[10px] font-bold text-slate-400">
-                  {settledTransfers}/{totalTransfers} 완료
-                </p>
-              ) : null}
             </div>
 
             {settlement.remittances.length === 0 ? (
@@ -262,73 +328,42 @@ export function ReportPage() {
             ) : (
               <div className="space-y-2">
                 {settlement.remittances.map((t) => {
-                  const key = transferKeyOf(t.sender.id, t.receiver.id, t.amount);
+                  const key = `${t.sender.id}->${t.receiver.id}@${t.amount}`;
                   const fromIsMe = t.sender.name === selfName;
                   const toIsMe = t.receiver.name === selfName;
-                  const done = doneKeys.has(key);
                   const localAmount = journey.rate ? t.amount / journey.rate : null;
                   return (
                     <div
                       key={key}
-                      className={`flex items-center justify-between rounded-2xl border px-4 py-3 transition-colors ${
-                        done ? 'border-green-100 bg-green-50' : 'border-slate-100 bg-slate-50'
-                      }`}
+                      className="flex items-center justify-between rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3"
                     >
                       <div className="flex items-center gap-2 text-[12px] font-black tracking-tight">
                         <span
                           className={`rounded-md px-2 py-0.5 text-[10px] font-black ${
-                            done
-                              ? 'bg-green-200 text-green-700'
-                              : fromIsMe
-                                ? 'bg-[#FF4D4D] text-white'
-                                : 'bg-white text-slate-700'
+                            fromIsMe ? 'bg-[#FF4D4D] text-white' : 'bg-white text-slate-700'
                           }`}
                         >
                           {t.sender.name}
                         </span>
-                        <ArrowRight
-                          className={`size-3 ${done ? 'text-green-400' : 'text-slate-400'}`}
-                        />
+                        <ArrowRight className="size-3 text-slate-400" />
                         <span
                           className={`rounded-md px-2 py-0.5 text-[10px] font-black ${
-                            done
-                              ? 'bg-green-200 text-green-700'
-                              : toIsMe
-                                ? 'bg-blue-500 text-white'
-                                : 'bg-white text-slate-700'
+                            toIsMe ? 'bg-blue-500 text-white' : 'bg-white text-slate-700'
                           }`}
                         >
                           {t.receiver.name}
                         </span>
                       </div>
-                      <div className="flex items-center gap-3">
-                        <div className="text-right">
-                          <p
-                            className={`text-sm font-black tracking-tight ${done ? 'text-green-600 line-through' : 'text-slate-900'}`}
-                          >
-                            {formatKRW(Math.round(t.amount))}
-                            <span className="ml-0.5 text-[10px] font-bold opacity-60">원</span>
+                      <div className="text-right">
+                        <p className="text-sm font-black tracking-tight text-slate-900">
+                          {formatKRW(Math.round(t.amount))}
+                          <span className="ml-0.5 text-[10px] font-bold opacity-60">원</span>
+                        </p>
+                        {localAmount != null && journey.currency !== 'KRW' ? (
+                          <p className="text-[10px] font-bold text-slate-400">
+                            {formatLocal(localAmount)} {journey.currency}
                           </p>
-                          {localAmount != null && journey.currency !== 'KRW' ? (
-                            <p
-                              className={`text-[10px] font-bold ${done ? 'text-green-400 line-through' : 'text-slate-400'}`}
-                            >
-                              {formatLocal(localAmount)} {journey.currency}
-                            </p>
-                          ) : null}
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => toggleDone(key)}
-                          className={`flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-full border-2 transition-colors active:scale-95 ${
-                            done
-                              ? 'border-green-500 bg-green-500 text-white'
-                              : 'border-slate-300 bg-white text-transparent'
-                          }`}
-                          aria-label="송금 완료"
-                        >
-                          <Check className="size-3.5" strokeWidth={3} />
-                        </button>
+                        ) : null}
                       </div>
                     </div>
                   );
@@ -552,9 +587,9 @@ function ReportSkeleton() {
 
         {/* 송금 루트 스켈레톤 */}
         <section>
-          <div className="mb-3 flex items-center justify-between px-1">
-            <div className="h-3 w-16 animate-pulse rounded bg-slate-200" />
-            <div className="h-3 w-12 animate-pulse rounded bg-slate-100" />
+          <div className="mb-3 px-1">
+            <div className="h-3 w-24 animate-pulse rounded bg-slate-200" />
+            <div className="mt-2 h-3 w-40 animate-pulse rounded bg-slate-100" />
           </div>
           <div className="space-y-2">
             {[1, 2].map((i) => (

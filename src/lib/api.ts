@@ -137,7 +137,15 @@ async function refreshAccessToken(): Promise<string | null> {
  */
 export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const url = buildUrl(path);
-  const needsDefaultJsonContentType = !hasContentTypeHeader(init?.headers);
+  const method = (init?.method ?? 'GET').toUpperCase();
+  const rawBody = init?.body;
+  const hasBody =
+    rawBody != null &&
+    !(typeof rawBody === 'string' && rawBody.length === 0);
+  // DELETE·GET 등 본문 없는 요청에 application/json을 붙이면 일부 서버가 415를 반환함.
+  const needsDefaultJsonContentType =
+    !hasContentTypeHeader(init?.headers) &&
+    !((method === 'DELETE' || method === 'GET') && !hasBody);
 
   const send = async (token: string | null) => {
     return fetch(url, {
