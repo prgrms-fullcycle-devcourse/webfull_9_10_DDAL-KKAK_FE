@@ -150,10 +150,18 @@ function serializeTrip(input: Partial<Journey> & { name?: string }): Record<stri
 }
 
 async function addParticipant(tripId: string, name: string): Promise<{ id: string; name: string }> {
-  return apiFetch(`/trips/${tripId}/participants`, {
-    method: 'POST',
-    body: JSON.stringify({ name }),
-  });
+  try {
+    return await apiFetch(`/trips/${tripId}/participants`, {
+      method: 'POST',
+      body: JSON.stringify({ name }),
+    });
+  } catch (e) {
+    // 409 = 이미 존재하는 참여자 → 재시도 시 발생, 성공으로 처리
+    if (e instanceof ApiError && e.status === 409) {
+      return { id: '', name };
+    }
+    throw e;
+  }
 }
 
 async function removeParticipant(tripId: string, participantId: string): Promise<void> {
