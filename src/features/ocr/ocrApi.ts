@@ -1,4 +1,4 @@
-import { env } from '@/config/env';
+import { apiFetchRaw } from '@/lib/api';
 
 /** 백엔드 `sendSuccess` / `sendError` 래퍼와 동일 */
 export type ApiSuccessResponse<T> = {
@@ -49,15 +49,6 @@ export type CreateOcrJobResponse = { receiptId: string; status: 'PENDING' };
 
 const RECEIPT_MAX_BYTES = 10 * 1024 * 1024;
 const ALLOWED_MIME = new Set(['image/jpeg', 'image/jpg', 'image/png', 'image/webp']);
-
-function apiBase(): string {
-  return env.API_BASE_URL.replace(/\/?$/, '/');
-}
-
-function expensesUrl(path: string): string {
-  const p = path.startsWith('/') ? path.slice(1) : path;
-  return new URL(p, apiBase()).toString();
-}
 
 export function validateReceiptFile(file: File): string | null {
   const type = file.type.toLowerCase();
@@ -115,6 +106,8 @@ export function getOcrErrorMessage(error: unknown): string {
         return '여정 정보가 누락되었어요. 다시 시도해 주세요.';
       case 'AUTH_001':
       case 'AUTH_002':
+      case 'MISSING_TOKEN':
+      case 'EXPIRED_TOKEN':
         return '로그인이 필요해요.';
       case 'TRIP_009':
         return '존재하지 않는 여행이에요. 여행을 다시 선택해 주세요.';
@@ -127,6 +120,9 @@ export function getOcrErrorMessage(error: unknown): string {
     }
     return error.detail || error.message || 'OCR 요청 중 오류가 발생했어요.';
   }
+  if (error instanceof TypeError) {
+    return '네트워크/서버 연결에 실패했어요. 잠시 후 다시 시도해 주세요.';
+  }
   if (error instanceof Error) return error.message;
   return 'OCR 요청 중 오류가 발생했어요.';
 }
@@ -134,11 +130,10 @@ export function getOcrErrorMessage(error: unknown): string {
 export async function createReceiptOcrJob(params: {
   file: File;
   tripId: string;
-  userId: string;
   currencyHint?: string;
   receiptLocale?: string;
 }): Promise<CreateOcrJobResponse> {
-  const { file, tripId, userId, currencyHint, receiptLocale } = params;
+  const { file, tripId, currencyHint, receiptLocale } = params;
 
   const form = new FormData();
   form.append('receipt', file);
@@ -146,16 +141,15 @@ export async function createReceiptOcrJob(params: {
   if (currencyHint?.trim()) form.append('currencyHint', currencyHint.trim());
   if (receiptLocale?.trim()) form.append('receiptLocale', receiptLocale.trim());
 
-  const res = await fetch(expensesUrl('expenses/ocr'), {
-    method: 'POST',
-    headers: { 'x-user-id': userId },
-    body: form,
-  });
+  const res = await apiFetchRaw('/expenses/ocr', { method: 'POST', body: form });
 
   const body = await parseJson(res);
   const apiError = parseApiError(body);
 
   if (!isRecord(body)) {
+    if (res.status === 401) {
+      throw new OcrApiError('로그인이 필요해요.', { code: 'MISSING_TOKEN', status: 401 });
+    }
     throw new OcrApiError(`OCR 요청 실패 (${res.status})`, { status: res.status });
   }
 
@@ -181,20 +175,19 @@ export async function createReceiptOcrJob(params: {
   return { receiptId, status: 'PENDING' };
 }
 
-export async function getReceiptOcrJob(params: {
-  receiptId: string;
-  userId: string;
-}): Promise<OcrJobResult> {
-  const { receiptId, userId } = params;
-  const res = await fetch(expensesUrl(`expenses/ocr/${encodeURIComponent(receiptId)}`), {
+export async function getReceiptOcrJob(params: { receiptId: string }): Promise<OcrJobResult> {
+  const { receiptId } = params;
+  const res = await apiFetchRaw(`/expenses/ocr/${encodeURIComponent(receiptId)}`, {
     method: 'GET',
-    headers: { 'x-user-id': userId },
   });
 
   const body = await parseJson(res);
   const apiError = parseApiError(body);
 
   if (!isRecord(body)) {
+    if (res.status === 401) {
+      throw new OcrApiError('로그인이 필요해요.', { code: 'MISSING_TOKEN', status: 401 });
+    }
     throw new OcrApiError(`OCR 조회 실패 (${res.status})`, { status: res.status });
   }
 
@@ -245,14 +238,13 @@ export type PollOcrOptions = {
 /** PENDING/PROCESSING 이 끝날 때까지 폴링. SUCCESS 또는 FAILED(및 EXPIRED)에서 종료 */
 export async function pollReceiptOcrJob(
   receiptId: string,
-  userId: string,
   options?: PollOcrOptions,
 ): Promise<OcrJobResult> {
   const baseIntervalMs = options?.intervalMs ?? 1200;
   const maxAttempts = options?.maxAttempts ?? 55;
 
   for (let i = 0; i < maxAttempts; i++) {
-    const job = await getReceiptOcrJob({ receiptId, userId });
+    const job = await getReceiptOcrJob({ receiptId });
 
     if (job.status === 'SUCCESS' || job.status === 'FAILED' || job.status === 'EXPIRED') {
       return job;
@@ -265,14 +257,10 @@ export async function pollReceiptOcrJob(
   throw new OcrApiError('OCR 분석 시간이 초과되었어요. 잠시 후 다시 시도해 주세요.');
 }
 
-export async function deleteReceiptOcrJob(params: {
-  receiptId: string;
-  userId: string;
-}): Promise<void> {
-  const { receiptId, userId } = params;
-  const res = await fetch(expensesUrl(`expenses/ocr/${encodeURIComponent(receiptId)}`), {
+export async function deleteReceiptOcrJob(params: { receiptId: string }): Promise<void> {
+  const { receiptId } = params;
+  const res = await apiFetchRaw(`/expenses/ocr/${encodeURIComponent(receiptId)}`, {
     method: 'DELETE',
-    headers: { 'x-user-id': userId },
   });
 
   const body = await parseJson(res);
@@ -286,6 +274,12 @@ export async function deleteReceiptOcrJob(params: {
     });
   }
   if (!res.ok) {
+    if (res.status === 401) {
+      throw new OcrApiError('로그인이 필요해요.', {
+        code: 'MISSING_TOKEN',
+        status: 401,
+      });
+    }
     throw new OcrApiError(`OCR 삭제 실패 (${res.status})`, { status: res.status });
   }
 }

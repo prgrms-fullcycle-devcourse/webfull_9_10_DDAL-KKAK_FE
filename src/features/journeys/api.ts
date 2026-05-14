@@ -183,6 +183,20 @@ async function syncParticipants(
   return next;
 }
 
+/** 정산 요약 등에서 PARTICIPANT_NOT_FOUND가 나지 않도록, 일시 실패 시 한 번 더 시도 */
+async function syncParticipantsWithRetry(
+  tripId: string,
+  existingIds: Record<string, string>,
+  nextNames: string[],
+): Promise<Record<string, string>> {
+  try {
+    return await syncParticipants(tripId, existingIds, nextNames);
+  } catch {
+    await new Promise((r) => setTimeout(r, 500));
+    return await syncParticipants(tripId, existingIds, nextNames);
+  }
+}
+
 /** 토큰 없음 또는 명시 mock → 여행/정산 등은 로컬 스토리지·클라이언트 계산과 동일 기준으로 맞출 것 */
 export function isMockMode(): boolean {
   const hasToken = !!localStorage.getItem('tt_access_token_v1');
@@ -250,20 +264,19 @@ export async function createTrip(input: CreateTripInput): Promise<Journey> {
     });
     const trip = normalizeJourney(created);
 
-    // 여행 생성 후 참여자 개별 등록 (실패해도 여행 생성은 성공으로 처리)
-    if (input.participants?.length) {
-      try {
-        const participantIdsByName = await syncParticipants(trip.id, {}, input.participants);
-        saveParticipantsCache(trip.id, input.participants, participantIdsByName);
-        return { ...trip, participants: input.participants, participantIdsByName };
-      } catch {
-        // 백엔드 API 실패해도 로컬 캐시에는 저장
-        saveParticipantsCache(trip.id, input.participants, {});
-        return { ...trip, participants: input.participants };
-      }
+    // 여행 생성 후 참여자 개별 등록 — 백엔드 정산 요약은 DB 참가자 행이 있어야 동작
+    const namesToRegister =
+      input.participants?.length > 0
+        ? input.participants
+        : [input.selfParticipant?.trim() || '나'];
+    try {
+      const participantIdsByName = await syncParticipantsWithRetry(trip.id, {}, namesToRegister);
+      saveParticipantsCache(trip.id, namesToRegister, participantIdsByName);
+      return { ...trip, participants: namesToRegister, participantIdsByName };
+    } catch {
+      saveParticipantsCache(trip.id, namesToRegister, {});
+      return { ...trip, participants: namesToRegister };
     }
-
-    return trip;
   } catch (e) {
     if (e instanceof ApiError && (e.status === 401 || e.status === 404 || e.status === 501)) {
       const id = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -293,7 +306,7 @@ export async function updateTrip(tripId: string, patch: Partial<Journey>): Promi
     if (patch.participants !== undefined) {
       try {
         const existingIds = patch.participantIdsByName ?? trip.participantIdsByName ?? {};
-        const participantIdsByName = await syncParticipants(
+        const participantIdsByName = await syncParticipantsWithRetry(
           tripId,
           existingIds,
           patch.participants,

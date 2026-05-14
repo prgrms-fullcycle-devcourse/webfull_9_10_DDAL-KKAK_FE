@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { ApiError, apiFetch } from '@/lib/api';
-import { clearAuth, loadAuth, saveAuth } from './auth';
+import { clearAuth, loadAccessToken, loadAuth, saveAuth } from './auth';
 import { AuthContext, type User } from './AuthContext';
 
 /**
@@ -21,6 +21,47 @@ function hydrateUser(): User {
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User>(hydrateUser);
+  const [isBooting, setIsBooting] = useState<boolean>(() => {
+    const state = loadAuth();
+    if (state.status === 'logged_in') return false;
+    return !!loadAccessToken();
+  });
+
+  /**
+   * 일부 배포/콜백 경로에서 accessToken만 저장되고 `tt_auth_v2` 프로필이 비는 경우 복구.
+   * (새로고침 시 hydrate가 logged_out으로만 되어 로그인으로 튕기는 현상 완화)
+   */
+  useEffect(() => {
+    let cancelled = false;
+    const state = loadAuth();
+    if (state.status === 'logged_in') {
+      setIsBooting(false);
+      return;
+    }
+    const token = loadAccessToken();
+    if (!token) {
+      setIsBooting(false);
+      return;
+    }
+
+    void (async () => {
+      try {
+        const me = await apiFetch<{ id: string; name: string; imageUrl?: string }>('/users/me');
+        if (cancelled) return;
+        const next = { id: me.id, name: me.name, imageUrl: me.imageUrl };
+        saveAuth({ status: 'logged_in', user: next });
+        setUser(next);
+      } catch {
+        // 토큰 무효 등 — 그대로 비로그인
+      } finally {
+        if (!cancelled) setIsBooting(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // refresh token이 만료/탈취되면 api.ts에서 'auth:cleared' 이벤트 발행.
   // 여기서 듣고 user state도 즉시 null로 → ProtectedRoute가 /login으로 리다이렉트.
@@ -34,6 +75,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     <AuthContext.Provider
       value={{
         user,
+        isBooting,
         login: (next) => {
           setUser(next);
           if (next) {
@@ -41,8 +83,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               status: 'logged_in',
               user: { id: next.id, name: next.name, imageUrl: next.imageUrl },
             });
+            setIsBooting(false);
           } else {
             clearAuth();
+            setIsBooting(false);
           }
         },
         logout: async () => {
@@ -56,6 +100,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
           setUser(null);
           clearAuth();
+          setIsBooting(false);
         },
         withdraw: async () => {
           // 회원 탈퇴 — 백엔드 사용자/연동 데이터 삭제.
@@ -74,6 +119,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           // 탈퇴 후 같은 기기에서 재가입할 때 깨끗한 상태로 시작하도록.
           setUser(null);
           localStorage.clear();
+          setIsBooting(false);
         },
       }}
     >

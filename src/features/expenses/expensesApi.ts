@@ -1,7 +1,6 @@
-import { env } from '@/config/env';
+import { ApiError, apiFetch } from '@/lib/api';
+import { displayExpenseCategory, toApiExpenseCategory } from '@/features/expenses/expenseCategory';
 import type { Expense } from '@/features/expenses/types';
-
-const TOKEN_KEY = 'tt_access_token_v1';
 
 export class ExpenseApiError extends Error {
   code?: string;
@@ -17,75 +16,30 @@ export class ExpenseApiError extends Error {
   }
 }
 
-function apiBase(): string {
-  return env.API_BASE_URL.replace(/\/?$/, '/');
-}
-
-function expensesUrl(path: string): string {
-  // dev: Vite 프록시를 타도록 상대 경로 사용 (lib/api.ts와 동일 규칙)
-  if (import.meta.env.DEV) {
-    return path.startsWith('/') ? path : `/${path}`;
-  }
-  const p = path.startsWith('/') ? path.slice(1) : path;
-  return new URL(p, apiBase()).toString();
-}
-
-async function parseJson(res: Response): Promise<unknown> {
-  const text = await res.text();
-  if (!text) return null;
-  try {
-    return JSON.parse(text) as unknown;
-  } catch {
-    return null;
-  }
-}
-
 function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null;
 }
 
-/** Authorization: Bearer {token} 헤더 반환 */
-function getAuthHeaders(): Record<string, string> {
-  const token = localStorage.getItem(TOKEN_KEY);
-  return token ? { Authorization: `Bearer ${token}` } : {};
+/** apiFetch/ApiError → ExpenseApiError 변환 */
+function toExpenseApiError(error: unknown, fallbackMessage: string): ExpenseApiError {
+  if (error instanceof ExpenseApiError) return error;
+  if (error instanceof ApiError) {
+    return new ExpenseApiError(error.message || fallbackMessage, {
+      code: error.code,
+      status: error.status,
+      detail: error.message,
+    });
+  }
+  if (error instanceof TypeError) {
+    return new ExpenseApiError('네트워크/서버 연결에 실패했어요. 잠시 후 다시 시도해 주세요.', {
+      code: 'NETWORK_ERROR',
+    });
+  }
+  if (error instanceof Error) {
+    return new ExpenseApiError(error.message || fallbackMessage);
+  }
+  return new ExpenseApiError(fallbackMessage);
 }
-
-/**
- * API 에러 응답({ message, code }) → ExpenseApiError.
- * 구형 { success: false, error: { code } } 형식도 함께 지원.
- */
-function extractApiError(body: unknown, status: number): ExpenseApiError | null {
-  if (!isRecord(body)) return null;
-  const message = typeof body.message === 'string' ? body.message : '';
-  const code =
-    typeof body.code === 'string'
-      ? body.code
-      : isRecord(body.error) && typeof body.error.code === 'string'
-        ? body.error.code
-        : undefined;
-  if (!message) return null;
-  return new ExpenseApiError(message || '지출 API 요청 실패', { code, status });
-}
-
-/** { data: ... } 엔벨로프에서 data 추출 */
-function extractData(body: unknown): unknown {
-  if (isRecord(body) && 'data' in body) return body.data;
-  return body;
-}
-
-// 카테고리: 프론트(한국어/영문) → 백엔드(FOOD | SHOPPING | TRANSPORT | TOUR | ETC)
-const CATEGORY_TO_API: Record<string, string> = {
-  기타: 'ETC',
-  음식: 'FOOD',
-  쇼핑: 'SHOPPING',
-  교통: 'TRANSPORT',
-  관광: 'TOUR',
-  FOOD: 'FOOD',
-  SHOPPING: 'SHOPPING',
-  TRANSPORT: 'TRANSPORT',
-  TOUR: 'TOUR',
-  ETC: 'ETC',
-};
 
 function toExpensePayload(
   expense:
@@ -94,7 +48,9 @@ function toExpensePayload(
     | (Omit<Partial<Expense>, 'receiptId'> & { journeyId: string; receiptId?: string | null }),
 ) {
   const amountOriginal =
-    'amountLocal' in expense && expense.amountLocal !== undefined ? Number(expense.amountLocal) : undefined;
+    'amountLocal' in expense && expense.amountLocal !== undefined
+      ? Number(expense.amountLocal)
+      : undefined;
   const fxRate =
     'fxRateTripToKrw' in expense && expense.fxRateTripToKrw !== undefined
       ? Number(expense.fxRateTripToKrw)
@@ -129,15 +85,16 @@ function toExpensePayload(
   if (fxRate !== undefined) payload.fxRateTripToKrw = fxRate;
   if (amountKrw !== undefined) payload.amountKrw = amountKrw;
   if ('fxMode' in expense && expense.fxMode !== undefined) payload.fxMode = expense.fxMode;
-  if ('splitMode' in expense && expense.splitMode !== undefined) payload.splitMode = expense.splitMode;
-  if ('splitWith' in expense && expense.splitWith !== undefined) payload.splitWith = expense.splitWith;
+  if ('splitMode' in expense && expense.splitMode !== undefined)
+    payload.splitMode = expense.splitMode;
+  if ('splitWith' in expense && expense.splitWith !== undefined)
+    payload.splitWith = expense.splitWith;
   if ('method' in expense && expense.method !== undefined) payload.method = expense.method;
   if ('emoji' in expense && expense.emoji !== undefined) payload.emoji = expense.emoji;
-  // 카테고리: 한국어·영문 모두 백엔드 enum으로 변환
+  // 카테고리: 한국어·영문 모두 백엔드 enum으로 변환 (expenseCategory.ts)
   if ('category' in expense && expense.category !== undefined) {
-    payload.category = CATEGORY_TO_API[expense.category] ?? 'ETC';
+    payload.category = toApiExpenseCategory(expense.category);
   }
-
   return payload;
 }
 
@@ -156,9 +113,12 @@ function fromApiExpense(raw: unknown, fallback: Expense): Expense {
     id: typeof raw.id === 'string' ? raw.id : fallback.id,
     journeyId: typeof raw.tripId === 'string' ? raw.tripId : fallback.journeyId,
     receiptId:
-      raw.receiptId === null ? undefined : typeof raw.receiptId === 'string' ? raw.receiptId : fallback.receiptId,
+      raw.receiptId === null
+        ? undefined
+        : typeof raw.receiptId === 'string'
+          ? raw.receiptId
+          : fallback.receiptId,
     storeName: typeof raw.title === 'string' ? raw.title : fallback.storeName,
-    category: typeof raw.category === 'string' ? raw.category : fallback.category,
     amountLocal:
       typeof raw.amountOriginal === 'number'
         ? raw.amountOriginal
@@ -166,9 +126,11 @@ function fromApiExpense(raw: unknown, fallback: Expense): Expense {
     currency: mappedCurrency || fallback.currency,
     paidAt: typeof raw.spentAt === 'string' ? raw.spentAt : fallback.paidAt,
     payerParticipantId:
-      typeof raw.payerParticipantId === 'string' ? raw.payerParticipantId : fallback.payerParticipantId,
-    // payer: payerName(우선) → payerParticipantId → fallback 순.
-    // payerParticipantId만 있으면 이름 역변환은 JourneyTimelinePage에서 수행.
+      typeof raw.payerParticipantId === 'string'
+        ? raw.payerParticipantId
+        : fallback.payerParticipantId,
+    // payer: payerName(우선) → payerParticipantId → fallback 순. payerParticipantId만 있으면
+    // 이름 역변환은 JourneyTimelinePage에서 수행.
     payer:
       typeof raw.payerName === 'string' && raw.payerName.trim()
         ? raw.payerName.trim()
@@ -185,27 +147,29 @@ function fromApiExpense(raw: unknown, fallback: Expense): Expense {
       typeof raw.fxRateTripToKrw === 'number'
         ? raw.fxRateTripToKrw
         : Number(raw.fxRateTripToKrw) || fallback.fxRateTripToKrw,
-    amountKrw: typeof raw.amountKrw === 'number' ? raw.amountKrw : Number(raw.amountKrw) || fallback.amountKrw,
+    amountKrw:
+      typeof raw.amountKrw === 'number'
+        ? raw.amountKrw
+        : Number(raw.amountKrw) || fallback.amountKrw,
+    // 카테고리: 백엔드 enum → 표시용 문자열로 변환
+    category:
+      typeof raw.category === 'string' ? displayExpenseCategory(raw.category) : fallback.category,
     updatedAt: typeof raw.updatedAt === 'string' ? raw.updatedAt : fallback.updatedAt,
     createdAt: typeof raw.createdAt === 'string' ? raw.createdAt : fallback.createdAt,
   };
 }
 
 export async function listExpensesApi(params: { tripId: string }): Promise<Expense[]> {
-  const res = await fetch(expensesUrl(`expenses?tripId=${encodeURIComponent(params.tripId)}`), {
-    method: 'GET',
-    headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-    credentials: 'include',
-  });
-  const body = await parseJson(res);
-  if (!res.ok) {
-    const err = extractApiError(body, res.status);
-    if (err) throw err;
-    throw new ExpenseApiError(`지출 목록 조회 실패 (${res.status})`, { status: res.status });
+  let rows: unknown;
+  try {
+    rows = await apiFetch<unknown>(`/expenses?tripId=${encodeURIComponent(params.tripId)}`, {
+      method: 'GET',
+    });
+  } catch (error) {
+    throw toExpenseApiError(error, '지출 목록 조회 실패');
   }
-  const data = extractData(body);
-  if (!Array.isArray(data)) return [];
-  return data
+  if (!Array.isArray(rows)) return [];
+  return rows
     .map((row) =>
       fromApiExpense(row, {
         id: typeof row?.id === 'string' ? row.id : crypto.randomUUID(),
@@ -227,18 +191,14 @@ export async function listExpensesApi(params: { tripId: string }): Promise<Expen
 }
 
 export async function getExpenseApi(params: { expenseId: string }): Promise<Expense> {
-  const res = await fetch(expensesUrl(`expenses/${encodeURIComponent(params.expenseId)}`), {
-    method: 'GET',
-    headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-    credentials: 'include',
-  });
-  const body = await parseJson(res);
-  if (!res.ok) {
-    const err = extractApiError(body, res.status);
-    if (err) throw err;
-    throw new ExpenseApiError(`지출 조회 실패 (${res.status})`, { status: res.status });
+  let data: unknown;
+  try {
+    data = await apiFetch<unknown>(`/expenses/${encodeURIComponent(params.expenseId)}`, {
+      method: 'GET',
+    });
+  } catch (error) {
+    throw toExpenseApiError(error, '지출 조회 실패');
   }
-  const data = extractData(body);
   if (!isRecord(data)) {
     throw new ExpenseApiError('지출 응답 형식이 올바르지 않아요.');
   }
@@ -260,36 +220,25 @@ export async function getExpenseApi(params: { expenseId: string }): Promise<Expe
 }
 
 export async function deleteExpenseApi(params: { expenseId: string }): Promise<void> {
-  const res = await fetch(expensesUrl(`expenses/${encodeURIComponent(params.expenseId)}`), {
-    method: 'DELETE',
-    headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-    credentials: 'include',
-  });
-  const body = await parseJson(res);
-  if (!res.ok) {
-    const err = extractApiError(body, res.status);
-    if (err) throw err;
-    throw new ExpenseApiError(`지출 삭제 실패 (${res.status})`, { status: res.status });
+  try {
+    await apiFetch<unknown>(`/expenses/${encodeURIComponent(params.expenseId)}`, {
+      method: 'DELETE',
+    });
+  } catch (error) {
+    throw toExpenseApiError(error, '지출 삭제 실패');
   }
 }
 
 export async function createExpenseApi(params: { expense: Expense }): Promise<Expense> {
-  const res = await fetch(expensesUrl('expenses'), {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...getAuthHeaders(),
-    },
-    credentials: 'include',
-    body: JSON.stringify(toExpensePayload(params.expense)),
-  });
-  const body = await parseJson(res);
-  if (!res.ok) {
-    const err = extractApiError(body, res.status);
-    if (err) throw err;
-    throw new ExpenseApiError(`지출 생성 실패 (${res.status})`, { status: res.status });
+  let data: unknown;
+  try {
+    data = await apiFetch<unknown>('/expenses', {
+      method: 'POST',
+      body: JSON.stringify(toExpensePayload(params.expense)),
+    });
+  } catch (error) {
+    throw toExpenseApiError(error, '지출 생성 실패');
   }
-  const data = extractData(body);
   return fromApiExpense(data, params.expense);
 }
 
@@ -298,22 +247,15 @@ export async function patchExpenseApi(params: {
   patch: Omit<Partial<Expense>, 'receiptId'> & { journeyId: string; receiptId?: string | null };
   fallback: Expense;
 }): Promise<Expense> {
-  const res = await fetch(expensesUrl(`expenses/${encodeURIComponent(params.expenseId)}`), {
-    method: 'PATCH',
-    headers: {
-      'Content-Type': 'application/json',
-      ...getAuthHeaders(),
-    },
-    credentials: 'include',
-    body: JSON.stringify(toExpensePayload(params.patch)),
-  });
-  const body = await parseJson(res);
-  if (!res.ok) {
-    const err = extractApiError(body, res.status);
-    if (err) throw err;
-    throw new ExpenseApiError(`지출 수정 실패 (${res.status})`, { status: res.status });
+  let data: unknown;
+  try {
+    data = await apiFetch<unknown>(`/expenses/${encodeURIComponent(params.expenseId)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(toExpensePayload(params.patch)),
+    });
+  } catch (error) {
+    throw toExpenseApiError(error, '지출 수정 실패');
   }
-  const data = extractData(body);
   return fromApiExpense(data, params.fallback);
 }
 
@@ -334,6 +276,13 @@ export function getExpenseErrorMessage(error: unknown): string {
         return 'OCR이 아직 완료되지 않았어요. 잠시 후 다시 시도해 주세요.';
       case 'EXP_007':
         return '수정할 지출을 찾을 수 없습니다.';
+      case 'AUTH_001':
+      case 'AUTH_002':
+      case 'MISSING_TOKEN':
+      case 'EXPIRED_TOKEN':
+        return '로그인이 만료되었어요. 다시 로그인해 주세요.';
+      case 'NETWORK_ERROR':
+        return '네트워크/서버 연결에 실패했어요. 잠시 후 다시 시도해 주세요.';
       default:
         return error.detail || error.message || '지출 저장 중 오류가 발생했어요.';
     }
