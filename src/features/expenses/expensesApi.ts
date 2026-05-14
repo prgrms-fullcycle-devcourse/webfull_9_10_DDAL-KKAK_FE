@@ -62,9 +62,15 @@ function parseSplitWithFromApi(raw: unknown): {
   return { names };
 }
 
+/** toExpensePayload / 분담 id 계산 공통 입력 (PATCH 시 receiptId에 null 허용) */
+type ExpensePayloadInput =
+  | Expense
+  | (Partial<Expense> & { journeyId: string })
+  | (Omit<Partial<Expense>, 'receiptId'> & { journeyId: string; receiptId?: string | null });
+
 /** POST/PATCH: splitWithParticipantIds — 이름→id 맵이 있을 때만 채움(없으면 키 생략). */
 function splitWithParticipantIdsForPayload(
-  expense: Partial<Expense>,
+  expense: ExpensePayloadInput,
   nameToParticipantId?: Record<string, string>,
 ): { participantId: string }[] | undefined {
   if (!('splitMode' in expense) || expense.splitMode === undefined) return undefined;
@@ -88,10 +94,7 @@ function splitWithParticipantIdsForPayload(
 }
 
 function toExpensePayload(
-  expense:
-    | Expense
-    | (Partial<Expense> & { journeyId: string })
-    | (Omit<Partial<Expense>, 'receiptId'> & { journeyId: string; receiptId?: string | null }),
+  expense: ExpensePayloadInput,
   opts?: { nameToParticipantId?: Record<string, string> },
 ) {
   const amountOriginal =
