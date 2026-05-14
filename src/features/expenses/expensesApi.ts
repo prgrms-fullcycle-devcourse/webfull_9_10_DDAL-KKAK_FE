@@ -19,6 +19,8 @@ export class ExpenseApiError extends Error {
 function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null;
 }
+
+/** apiFetch/ApiError → ExpenseApiError 변환 */
 function toExpenseApiError(error: unknown, fallbackMessage: string): ExpenseApiError {
   if (error instanceof ExpenseApiError) return error;
   if (error instanceof ApiError) {
@@ -59,9 +61,11 @@ function toExpensePayload(
       : amountOriginal !== undefined && fxRate !== undefined
         ? Math.round(amountOriginal * fxRate)
         : undefined;
+
   const payload: Record<string, unknown> = {
     tripId: expense.journeyId,
   };
+
   if ('receiptId' in expense) payload.receiptId = expense.receiptId;
   if ('storeName' in expense && expense.storeName !== undefined) payload.title = expense.storeName;
   if (amountOriginal !== undefined) payload.amountOriginal = amountOriginal;
@@ -70,11 +74,14 @@ function toExpensePayload(
   }
   if ('paidAt' in expense && expense.paidAt !== undefined) payload.spentAt = expense.paidAt;
   if ('comment' in expense && expense.comment !== undefined) payload.note = expense.comment;
+
+  // payerParticipantId 우선, 없으면 payer(이름 문자열) 폴백
   if ('payerParticipantId' in expense && expense.payerParticipantId !== undefined) {
     payload.payerParticipantId = expense.payerParticipantId;
   } else if ('payer' in expense && expense.payer !== undefined) {
     payload.payerParticipantId = expense.payer;
   }
+
   if (fxRate !== undefined) payload.fxRateTripToKrw = fxRate;
   if (amountKrw !== undefined) payload.amountKrw = amountKrw;
   if ('fxMode' in expense && expense.fxMode !== undefined) payload.fxMode = expense.fxMode;
@@ -84,6 +91,7 @@ function toExpensePayload(
     payload.splitWith = expense.splitWith;
   if ('method' in expense && expense.method !== undefined) payload.method = expense.method;
   if ('emoji' in expense && expense.emoji !== undefined) payload.emoji = expense.emoji;
+  // 카테고리: 한국어·영문 모두 백엔드 enum으로 변환 (expenseCategory.ts)
   if ('category' in expense && expense.category !== undefined) {
     payload.category = toApiExpenseCategory(expense.category);
   }
@@ -99,6 +107,7 @@ function fromApiExpense(raw: unknown, fallback: Expense): Expense {
       : apiCurrency === 'TRIP'
         ? fallback.currency
         : (apiCurrency as Expense['currency']);
+
   return {
     ...fallback,
     id: typeof raw.id === 'string' ? raw.id : fallback.id,
@@ -121,7 +130,7 @@ function fromApiExpense(raw: unknown, fallback: Expense): Expense {
         ? raw.payerParticipantId
         : fallback.payerParticipantId,
     // payer: payerName(우선) → payerParticipantId → fallback 순. payerParticipantId만 있으면
-    // 이름 역변환은 components 레이어(useExpensesQuery)에서 수행.
+    // 이름 역변환은 JourneyTimelinePage에서 수행.
     payer:
       typeof raw.payerName === 'string' && raw.payerName.trim()
         ? raw.payerName.trim()
@@ -142,20 +151,15 @@ function fromApiExpense(raw: unknown, fallback: Expense): Expense {
       typeof raw.amountKrw === 'number'
         ? raw.amountKrw
         : Number(raw.amountKrw) || fallback.amountKrw,
+    // 카테고리: 백엔드 enum → 표시용 문자열로 변환
     category:
-      typeof raw.category === 'string'
-        ? displayExpenseCategory(raw.category)
-        : fallback.category,
+      typeof raw.category === 'string' ? displayExpenseCategory(raw.category) : fallback.category,
     updatedAt: typeof raw.updatedAt === 'string' ? raw.updatedAt : fallback.updatedAt,
     createdAt: typeof raw.createdAt === 'string' ? raw.createdAt : fallback.createdAt,
   };
 }
 
-export async function listExpensesApi(params: {
-  tripId: string;
-  userId: string;
-}): Promise<Expense[]> {
-  void params.userId;
+export async function listExpensesApi(params: { tripId: string }): Promise<Expense[]> {
   let rows: unknown;
   try {
     rows = await apiFetch<unknown>(`/expenses?tripId=${encodeURIComponent(params.tripId)}`, {
@@ -186,11 +190,7 @@ export async function listExpensesApi(params: {
     .sort((a, b) => (a.paidAt < b.paidAt ? 1 : -1));
 }
 
-export async function getExpenseApi(params: {
-  expenseId: string;
-  userId: string;
-}): Promise<Expense> {
-  void params.userId;
+export async function getExpenseApi(params: { expenseId: string }): Promise<Expense> {
   let data: unknown;
   try {
     data = await apiFetch<unknown>(`/expenses/${encodeURIComponent(params.expenseId)}`, {
@@ -219,11 +219,7 @@ export async function getExpenseApi(params: {
   });
 }
 
-export async function deleteExpenseApi(params: {
-  expenseId: string;
-  userId: string;
-}): Promise<void> {
-  void params.userId;
+export async function deleteExpenseApi(params: { expenseId: string }): Promise<void> {
   try {
     await apiFetch<unknown>(`/expenses/${encodeURIComponent(params.expenseId)}`, {
       method: 'DELETE',
@@ -231,6 +227,36 @@ export async function deleteExpenseApi(params: {
   } catch (error) {
     throw toExpenseApiError(error, '지출 삭제 실패');
   }
+}
+
+export async function createExpenseApi(params: { expense: Expense }): Promise<Expense> {
+  let data: unknown;
+  try {
+    data = await apiFetch<unknown>('/expenses', {
+      method: 'POST',
+      body: JSON.stringify(toExpensePayload(params.expense)),
+    });
+  } catch (error) {
+    throw toExpenseApiError(error, '지출 생성 실패');
+  }
+  return fromApiExpense(data, params.expense);
+}
+
+export async function patchExpenseApi(params: {
+  expenseId: string;
+  patch: Omit<Partial<Expense>, 'receiptId'> & { journeyId: string; receiptId?: string | null };
+  fallback: Expense;
+}): Promise<Expense> {
+  let data: unknown;
+  try {
+    data = await apiFetch<unknown>(`/expenses/${encodeURIComponent(params.expenseId)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(toExpensePayload(params.patch)),
+    });
+  } catch (error) {
+    throw toExpenseApiError(error, '지출 수정 실패');
+  }
+  return fromApiExpense(data, params.fallback);
 }
 
 export function getExpenseErrorMessage(error: unknown): string {
@@ -263,40 +289,4 @@ export function getExpenseErrorMessage(error: unknown): string {
   }
   if (error instanceof Error) return error.message;
   return '지출 저장 중 오류가 발생했어요.';
-}
-
-export async function createExpenseApi(params: {
-  expense: Expense;
-  userId: string;
-}): Promise<Expense> {
-  void params.userId;
-  let data: unknown;
-  try {
-    data = await apiFetch<unknown>('/expenses', {
-      method: 'POST',
-      body: JSON.stringify(toExpensePayload(params.expense)),
-    });
-  } catch (error) {
-    throw toExpenseApiError(error, '지출 생성 실패');
-  }
-  return fromApiExpense(data, params.expense);
-}
-
-export async function patchExpenseApi(params: {
-  expenseId: string;
-  patch: Omit<Partial<Expense>, 'receiptId'> & { journeyId: string; receiptId?: string | null };
-  fallback: Expense;
-  userId: string;
-}): Promise<Expense> {
-  void params.userId;
-  let data: unknown;
-  try {
-    data = await apiFetch<unknown>(`/expenses/${encodeURIComponent(params.expenseId)}`, {
-      method: 'PATCH',
-      body: JSON.stringify(toExpensePayload(params.patch)),
-    });
-  } catch (error) {
-    throw toExpenseApiError(error, '지출 수정 실패');
-  }
-  return fromApiExpense(data, params.fallback);
 }
