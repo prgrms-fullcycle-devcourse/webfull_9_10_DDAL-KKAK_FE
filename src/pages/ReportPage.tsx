@@ -1,8 +1,10 @@
 import { ArrowRight, ChevronRight, Coins, ImageDown, Sparkles, Users } from 'lucide-react';
+import domtoimage from 'dom-to-image-more';
 import html2canvas from 'html2canvas';
 import { useRef, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { TopBar } from '@/components/layout/TopBar';
+import { loadAccessToken, loadAuth } from '@/features/auth/auth';
 import { useJourneyQuery } from '@/features/journeys/queries';
 import { ledgerSelfName } from '@/features/settlement/calc';
 import { useSettlementQuery } from '@/features/settlement/queries';
@@ -32,27 +34,16 @@ function downloadDataUrl(dataUrl: string, filename: string): void {
   a.remove();
 }
 
-/** iOS 등에서 `download` 속성이 무시될 때 공유 시트로 넘김 */
-async function deliverPng(blob: Blob, filename: string): Promise<void> {
-  if (typeof navigator !== 'undefined' && navigator.share && typeof File !== 'undefined') {
-    const file = new File([blob], filename, { type: 'image/png' });
-    const payload: ShareData = { files: [file], title: 'Travel Tick 정산 리포트' };
-    if (navigator.canShare?.(payload)) {
-      try {
-        await navigator.share(payload);
-        return;
-      } catch (err) {
-        if (err instanceof DOMException && err.name === 'AbortError') return;
-        // 그 외 오류는 일반 다운로드로 폴백
-      }
-    }
-  }
+function deliverPng(blob: Blob, filename: string): void {
   downloadBlob(blob, filename);
 }
 
 export function ReportPage() {
   const nav = useNavigate();
   const { journeyId } = useParams();
+  const [searchParams] = useSearchParams();
+  /** Playwright 등 서버 캡처 시 ?capture=1 — 앱 크롬 UI 제외 */
+  const isCaptureLayout = searchParams.get('capture') === '1';
   const {
     data: journey,
     isPending: journeyPending,
@@ -165,23 +156,39 @@ export function ReportPage() {
     const filename = `travel-tick-report-${journey.id}.png`;
 
     const tryPlaywrightServer = async (): Promise<boolean> => {
-      // `npm run dev` + Vite 프록시 + screenshot 서버(8787)일 때만 의미 있음.
-      // Vercel 등 배포 호스팅은 이 POST를 받지 않아 405(Method Not Allowed)가 남 — 요청 자체를 보내지 않음.
-      if (!import.meta.env.DEV) return false;
+      const remoteBase = import.meta.env.VITE_SCREENSHOT_SERVER_URL?.trim();
+      const endpoint = remoteBase
+        ? `${remoteBase.replace(/\/$/, '')}/__screenshot/report`
+        : import.meta.env.DEV
+          ? '/__screenshot/report'
+          : null;
+      if (!endpoint) return false;
+
+      const auth = loadAuth();
+      const token = loadAccessToken() ?? '';
+      const secret = import.meta.env.VITE_SCREENSHOT_SECRET?.trim();
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (secret) headers['X-Screenshot-Secret'] = secret;
+
       const ctrl = new AbortController();
-      const timer = window.setTimeout(() => ctrl.abort(), 8000);
+      const timeoutMs = 45_000;
+      const timer = window.setTimeout(() => ctrl.abort(), timeoutMs);
       try {
-        const res = await fetch('/__screenshot/report', {
+        const res = await fetch(endpoint, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ journeyId: journey.id }),
+          headers,
+          body: JSON.stringify({
+            journeyId: journey.id,
+            accessToken: token,
+            ...(auth.status === 'logged_in' ? { authV2: auth } : {}),
+          }),
           signal: ctrl.signal,
         });
         if (!res.ok) return false;
         const ct = res.headers.get('Content-Type') || '';
         if (!ct.includes('image/png')) return false;
         const blob = await res.blob();
-        await deliverPng(blob, filename);
+        deliverPng(blob, filename);
         return true;
       } catch {
         return false;
@@ -190,9 +197,38 @@ export function ReportPage() {
       }
     };
 
-    const tryClientCapture = async (): Promise<void> => {
+    /** SVG foreignObject — html2canvas가 실패할 때만 최후 수단 */
+    const tryDomToImage = async (): Promise<boolean> => {
+      try {
+        const w = root.offsetWidth;
+        const h = root.scrollHeight;
+        const blob = await domtoimage.toBlob(root, {
+          bgcolor: '#ffffff',
+          width: w,
+          height: h,
+          cacheBust: true,
+          onclone: (cloned) => {
+            const doc = cloned.ownerDocument;
+            if (doc) stripUnsupportedColorStylesFromClone(doc);
+          },
+        });
+        if (!blob || blob.size < 80) return false;
+        deliverPng(blob, filename);
+        return true;
+      } catch {
+        return false;
+      }
+    };
+
+    const tryHtml2Canvas = async (): Promise<void> => {
       const h = root.scrollHeight;
-      const scale = h > 7000 ? 1 : h > 4000 ? 1.5 : 2;
+      const w = root.offsetWidth;
+      let scale = h > 7000 ? 1 : h > 4000 ? 1.5 : 2;
+      const maxPx = 8192;
+      while (Math.ceil(w * scale) > maxPx || Math.ceil(h * scale) > maxPx) {
+        scale = Math.max(0.5, scale * 0.75);
+        if (scale <= 0.5) break;
+      }
       const canvas = await html2canvas(root, {
         scale,
         useCORS: true,
@@ -207,7 +243,7 @@ export function ReportPage() {
         canvas.toBlob(
           async (blob) => {
             if (blob) {
-              await deliverPng(blob, filename);
+              deliverPng(blob, filename);
               resolve();
               return;
             }
@@ -229,16 +265,39 @@ export function ReportPage() {
       });
     };
 
+    const tryHtml2CanvasSafe = async (): Promise<boolean> => {
+      try {
+        await tryHtml2Canvas();
+        return true;
+      } catch {
+        return false;
+      }
+    };
+
     try {
-      const ok = await tryPlaywrightServer();
-      if (!ok) await tryClientCapture();
+      const playwrightOk = await tryPlaywrightServer();
+      if (!playwrightOk) {
+        const hasRemoteScreenshot = !!import.meta.env.VITE_SCREENSHOT_SERVER_URL?.trim();
+        if (import.meta.env.DEV && !hasRemoteScreenshot) {
+          const useBrowserCapture = window.confirm(
+            'Playwright 고화질 저장을 쓰려면 다른 터미널에서\n`npm run dev:screenshot-server`\n를 실행한 뒤 다시 「이미지로 저장하기」를 눌러 주세요.\n\n' +
+              '지금은 브라우저 캡처로 저장할까요? (화면과 스타일이 다를 수 있어요.)',
+          );
+          if (!useBrowserCapture) return;
+        }
+        const h2Ok = await tryHtml2CanvasSafe();
+        if (!h2Ok) {
+          const domOk = await tryDomToImage();
+          if (!domOk) throw new Error('PNG를 만들 수 없어요.');
+        }
+      }
     } catch (e) {
       const detail = e instanceof Error ? e.message : '';
       alert(
         detail
           ? `이미지를 저장하지 못했어요.\n${detail}`
           : !import.meta.env.DEV
-            ? '이미지를 저장하지 못했어요. 배포 환경에서는 브라우저가 화면을 그려 저장합니다. 모바일은「공유」로 사진에 저장해 보시고, 다른 브라우저로도 한 번 시도해 주세요.'
+            ? '이미지를 저장하지 못했어요. 배포에서는 `VITE_SCREENSHOT_SERVER_URL`에 스크린샷 서버 URL을 넣으면 Playwright 고화질 경로를 씁니다. 없으면 브라우저 캡처만 시도해요. 모바일은「공유」로 사진에 저장해 보세요.'
             : '이미지를 저장하지 못했어요. 브라우저에서 화면을 그리는 데 실패했을 수 있어요. 로컬에서 `npm run dev:screenshot-server`를 켜면 Playwright 고화질 경로를 추가로 시도합니다.',
       );
     } finally {
@@ -248,9 +307,13 @@ export function ReportPage() {
 
   return (
     <div className="min-h-dvh bg-white">
-      <TopBar title="최종 정산 리포트" backTo={`/journeys/${journey.id}`} />
+      {!isCaptureLayout ? (
+        <TopBar title="최종 정산 리포트" backTo={`/journeys/${journey.id}`} />
+      ) : (
+        <div className="h-3 shrink-0 bg-white" aria-hidden />
+      )}
 
-      <main className="px-6 pb-10">
+      <main className={`px-6 pb-10 ${isCaptureLayout ? 'pt-2' : ''}`}>
         <div ref={reportRef} data-tt-report-root className="space-y-5 pb-6 pt-4">
           {/* 1. TOTAL — 다크 히어로 (백엔드 KRW 응답이 메인, 현지통화는 보조) */}
           <section className="rounded-[32px] bg-slate-900 p-7 text-white shadow-xl">
@@ -491,44 +554,48 @@ export function ReportPage() {
           ) : null}
         </div>
 
-        {/* 5. AI 소비 성향 리포트 — 캡처 영역 밖, 별도 액션 카드 */}
-        <button
-          type="button"
-          onClick={() => nav(`/journeys/${journey.id}/insight`)}
-          className="mt-2 flex w-full cursor-pointer items-center justify-between rounded-2xl border border-blue-100 bg-blue-50/60 p-4 text-left active:scale-[0.99]"
-        >
-          <div className="flex items-center gap-3">
-            <div className="grid size-10 shrink-0 place-items-center rounded-xl bg-blue-600 text-white shadow-sm shadow-blue-200">
-              <Sparkles className="size-5" />
-            </div>
-            <div>
-              <p className="text-sm font-black text-slate-900">AI 소비 성향 리포트 보기</p>
-              <p className="mt-0.5 text-[11px] font-bold text-slate-500">
-                이번 여행에서 어떤 소비 패턴을 보였는지 분석해드려요
-              </p>
-            </div>
-          </div>
-          <ChevronRight className="size-4 shrink-0 text-blue-600" />
-        </button>
+        {!isCaptureLayout ? (
+          <>
+            {/* 5. AI 소비 성향 리포트 — 캡처 영역 밖, 별도 액션 카드 */}
+            <button
+              type="button"
+              onClick={() => nav(`/journeys/${journey.id}/insight`)}
+              className="mt-2 flex w-full cursor-pointer items-center justify-between rounded-2xl border border-blue-100 bg-blue-50/60 p-4 text-left active:scale-[0.99]"
+            >
+              <div className="flex items-center gap-3">
+                <div className="grid size-10 shrink-0 place-items-center rounded-xl bg-blue-600 text-white shadow-sm shadow-blue-200">
+                  <Sparkles className="size-5" />
+                </div>
+                <div>
+                  <p className="text-sm font-black text-slate-900">AI 소비 성향 리포트 보기</p>
+                  <p className="mt-0.5 text-[11px] font-bold text-slate-500">
+                    이번 여행에서 어떤 소비 패턴을 보였는지 분석해드려요
+                  </p>
+                </div>
+              </div>
+              <ChevronRight className="size-4 shrink-0 text-blue-600" />
+            </button>
 
-        {/* 6. 이미지로 저장하기 — 메인 컬러 (브랜드 블루) */}
-        <button
-          type="button"
-          onClick={handleCapture}
-          disabled={isCapturing}
-          className="mt-3 flex w-full cursor-pointer items-center justify-center gap-2 rounded-2xl bg-blue-600 py-4 text-sm font-black text-white shadow-lg shadow-blue-200 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          <ImageDown className="size-4" />
-          {isCapturing ? '이미지 만드는 중…' : '이미지로 저장하기'}
-        </button>
+            {/* 6. 이미지로 저장하기 — 메인 컬러 (브랜드 블루) */}
+            <button
+              type="button"
+              onClick={handleCapture}
+              disabled={isCapturing}
+              className="mt-3 flex w-full cursor-pointer items-center justify-center gap-2 rounded-2xl bg-blue-600 py-4 text-sm font-black text-white shadow-lg shadow-blue-200 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <ImageDown className="size-4" />
+              {isCapturing ? '이미지 만드는 중…' : '이미지로 저장하기'}
+            </button>
 
-        <button
-          type="button"
-          onClick={() => nav(`/journeys/${journey.id}`)}
-          className="mt-3 w-full cursor-pointer py-3 text-sm font-black text-slate-400"
-        >
-          타임라인으로 돌아가기
-        </button>
+            <button
+              type="button"
+              onClick={() => nav(`/journeys/${journey.id}`)}
+              className="mt-3 w-full cursor-pointer py-3 text-sm font-black text-slate-400"
+            >
+              타임라인으로 돌아가기
+            </button>
+          </>
+        ) : null}
       </main>
     </div>
   );

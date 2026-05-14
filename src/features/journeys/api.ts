@@ -1,6 +1,6 @@
-import { apiFetch } from '@/lib/api';
+import { apiFetch, ApiError } from '@/lib/api';
+import { journeyStatusFromDates } from '@/lib/dates';
 import type { Journey } from './types';
-import { ApiError } from '@/lib/api';
 import {
   addJourney,
   deleteJourney,
@@ -56,8 +56,14 @@ function participantsFromTripRecord(r: Record<string, unknown>): {
 
 const STATUS_FROM_API: Record<string, Journey['status']> = {
   PLANNING: 'planned',
+  PLANNED: 'planned',
+  UPCOMING: 'planned',
   ONGOING: 'active',
+  ACTIVE: 'active',
+  IN_PROGRESS: 'active',
   COMPLETED: 'ended',
+  ENDED: 'ended',
+  FINISHED: 'ended',
 };
 
 const CURRENCY_TO_COUNTRY: Record<string, string> = {
@@ -93,13 +99,22 @@ function normalizeJourney(raw: Journey): Journey {
       ? (rawFxMode as Journey['rateMode'])
       : (raw.rateMode ?? 'fixed');
 
-  const rawStatus = typeof r.status === 'string' ? r.status : '';
-  const resolvedStatus: Journey['status'] =
-    STATUS_FROM_API[rawStatus] ?? (raw.status as Journey['status']) ?? 'active';
-
   const resolvedStartDate =
     typeof r.startDate === 'string' ? r.startDate.slice(0, 10) : raw.startDate;
   const resolvedEndDate = typeof r.endDate === 'string' ? r.endDate.slice(0, 10) : raw.endDate;
+
+  const rawStatus = typeof r.status === 'string' ? r.status.trim() : '';
+  const statusKey = rawStatus.toUpperCase();
+  const fromCalendar =
+    resolvedStartDate && resolvedEndDate
+      ? journeyStatusFromDates(resolvedStartDate, resolvedEndDate)
+      : null;
+  const resolvedStatus: Journey['status'] =
+    fromCalendar ??
+    STATUS_FROM_API[statusKey] ??
+    (raw.status === 'planned' || raw.status === 'active' || raw.status === 'ended'
+      ? raw.status
+      : 'active');
 
   const resolvedCountry =
     (typeof r.country === 'string' && r.country.trim()) ||

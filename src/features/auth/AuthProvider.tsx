@@ -104,13 +104,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         },
         withdraw: async () => {
           // 회원 탈퇴 — 백엔드 사용자/연동 데이터 삭제.
-          // 404 USER_NOT_FOUND: 이미 탈퇴된 계정 → 성공으로 간주.
-          // 500 WITHDRAWAL_FAILED: 진짜 실패 → throw해서 caller가 재시도 안내.
+          // 404: 이미 탈퇴된 계정 → 성공으로 간주.
+          // 405: DELETE 미지원 서버 → POST {} 한 번만 시도 (500이면 POST는 보통 404만 내어 혼란만 가중됨).
+          const postWithdraw = () =>
+            apiFetch<null>('/auth/withdraw', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: '{}',
+            });
+
           try {
             await apiFetch<null>('/auth/withdraw', { method: 'DELETE' });
           } catch (e) {
             if (e instanceof ApiError && e.status === 404) {
               // 이미 탈퇴된 상태 — 로컬 정리만 하면 됨
+            } else if (e instanceof ApiError && e.status === 405) {
+              try {
+                await postWithdraw();
+              } catch (e2) {
+                throw e2;
+              }
             } else {
               throw e;
             }

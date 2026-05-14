@@ -17,7 +17,7 @@ export type AuthCtx = {
    */
   logout: () => Promise<void>;
   /**
-   * 회원 탈퇴 — DELETE /auth/withdraw 호출 후 모든 로컬 데이터 삭제.
+   * 회원 탈퇴 — DELETE /auth/withdraw (405일 때만 POST 폴백) 후 모든 로컬 데이터 삭제.
    * 404 USER_NOT_FOUND(이미 탈퇴됨)는 성공으로 처리.
    * 500 WITHDRAWAL_FAILED 등 진짜 실패는 throw → caller가 재시도 유도.
    */

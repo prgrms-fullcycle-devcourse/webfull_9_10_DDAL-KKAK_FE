@@ -4,6 +4,24 @@ import { useNavigate } from 'react-router-dom';
 import { BottomNav } from '../components/layout/BottomNav';
 import { TopBar } from '../components/layout/TopBar';
 import { useAuth } from '@/features/auth/useAuth';
+import { ApiError } from '@/lib/api';
+
+function formatWithdrawError(e: unknown): string {
+  if (e instanceof ApiError) {
+    if (e.status === 500) {
+      const detail = e.message && e.message !== 'HTTP 500' ? ` (${e.message})` : '';
+      return `서버 오류(500)로 탈퇴가 완료되지 않았어요. 백엔드 /auth/withdraw 처리를 확인해 주세요.${detail}`;
+    }
+    if (e.status === 404) {
+      return e.message && e.message !== 'HTTP 404'
+        ? e.message
+        : '탈퇴 API를 찾을 수 없어요. 백엔드에 DELETE /auth/withdraw 가 있는지 확인해 주세요.';
+    }
+    return e.message;
+  }
+  if (e instanceof Error) return e.message;
+  return '회원 탈퇴 처리 중 오류가 발생했어요.';
+}
 
 export function SettingsPage() {
   const nav = useNavigate();
@@ -18,12 +36,11 @@ export function SettingsPage() {
     setWithdrawError(null);
     try {
       await withdraw();
-      // 성공: 모든 로컬 데이터 정리됨 → 로그인 화면으로
+      setWithdrawing(false);
+      setShowWithdrawModal(false);
       nav('/login', { replace: true });
     } catch (e) {
-      setWithdrawError(
-        e instanceof Error ? e.message : '회원 탈퇴 처리 중 오류가 발생했어요.',
-      );
+      setWithdrawError(formatWithdrawError(e));
       setWithdrawing(false);
     }
   };

@@ -10,6 +10,8 @@ declare module 'dom-to-image-more' {
     cacheBust?: boolean;
     filter?: Filter;
     quality?: number;
+    /** dom-to-image-more 내부 클론 직후 호출 (라이브러리 타입에 없어 런타임에서만 지원됨) */
+    onclone?: (clonedRoot: HTMLElement) => void;
   };
 
   const domToImage: {
