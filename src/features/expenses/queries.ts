@@ -15,7 +15,10 @@ import {
   loadAllExpenses,
   updateExpense,
 } from '@/features/expenses/storage';
+import { fetchTrips } from '@/features/journeys/api';
+import type { Journey } from '@/features/journeys/types';
 import { loadJourneys } from '@/features/journeys/storage';
+import { isDemoLocalOnlyJourneyId } from '@/mocks/data';
 
 async function sleep(ms: number) {
   await new Promise((r) => setTimeout(r, ms));
@@ -47,8 +50,8 @@ export function useExpensesQuery(journeyId: string | undefined, userId?: string)
     queryFn: async (): Promise<Expense[]> => {
       await sleep(80);
       if (!journeyId) return [];
-      // 로그인 안 됨 → 로컬 스토리지
-      if (!userId || !hasBackendAuth()) {
+      // 로그인 안 됨 또는 데모 전용 여정 → 로컬 스토리지
+      if (!userId || !hasBackendAuth() || isDemoLocalOnlyJourneyId(journeyId)) {
         return loadAllExpenses().filter((e) => e.journeyId === journeyId);
       }
       try {
@@ -64,13 +67,18 @@ export function useExpensesQuery(journeyId: string | undefined, userId?: string)
 }
 
 export function useAllExpensesQuery(userId?: string) {
+  const qc = useQueryClient();
   return useQuery({
     queryKey: ['expenses'],
     queryFn: async (): Promise<Expense[]> => {
       await sleep(80);
       if (!userId || !hasBackendAuth()) return loadAllExpenses();
       try {
-        const tripIds = loadJourneys().map((j) => j.id);
+        // 캐시된 여정 목록 우선 사용, 없으면 API 조회
+        const cached = qc.getQueryData<Journey[]>(['journeys']);
+        const trips = cached !== undefined ? cached : await fetchTrips();
+        const tripIds = trips.map((j) => j.id).filter((id) => !isDemoLocalOnlyJourneyId(id));
+        if (tripIds.length === 0) return [];
         const rows = await Promise.all(tripIds.map((tripId) => listExpensesApi({ tripId })));
         return rows.flat();
       } catch (error) {
