@@ -81,30 +81,33 @@ export function OcrPreviewPage() {
 
     try {
       await addExpense.mutateAsync({
-        id: `e-${Date.now()}`,
-        journeyId,
-        receiptId: receiptId ?? undefined,
-        storeName: draft.storeName.trim() || '지출',
-        amountLocal: Number(draft.amountLocal) || 0,
+        expense: {
+          id: `e-${Date.now()}`,
+          journeyId,
+          receiptId: receiptId ?? undefined,
+          storeName: draft.storeName.trim() || '지출',
+          amountLocal: Number(draft.amountLocal) || 0,
 
-        currency: draft.currency,
-        splitMode: draft.splitMode,
-        splitWith,
+          currency: draft.currency,
+          splitMode: draft.splitMode,
+          splitWith,
 
-        method: draft.method ?? 'card',
-        category: draft.category || '기타',
-        paidAt,
-        payer: draft.payer,
-        payerParticipantId: resolveParticipantId(draft.payer),
-        emoji: draft.emoji || '🧾',
-        fxMode: journey.rateMode === 'fixed' ? 'FIXED' : 'REALTIME',
-        fxRateTripToKrw: journey.rate,
-        amountKrw: Math.round((Number(draft.amountLocal) || 0) * journey.rate),
+          method: draft.method ?? 'card',
+          category: draft.category || '기타',
+          paidAt,
+          payer: draft.payer,
+          payerParticipantId: resolveParticipantId(draft.payer),
+          emoji: draft.emoji || '🧾',
+          fxMode: journey.rateMode === 'fixed' ? 'FIXED' : 'REALTIME',
+          fxRateTripToKrw: journey.rate,
+          amountKrw: Math.round((Number(draft.amountLocal) || 0) * journey.rate),
 
-        comment: draft.comment?.trim() || undefined,
+          comment: draft.comment?.trim() || undefined,
 
-        createdAt: systemNow,
-        updatedAt: systemNow,
+          createdAt: systemNow,
+          updatedAt: systemNow,
+        },
+        nameToParticipantId: journey.participantIdsByName,
       });
 
       nav(`/journeys/${journeyId}`, { replace: true });

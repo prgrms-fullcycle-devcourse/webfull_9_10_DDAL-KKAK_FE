@@ -246,10 +246,17 @@ export function ExpenseForm({
           journeyId,
           ...receiptPatch,
         };
-        const saved = await updateMut.mutateAsync({ id: expenseId, patch: patchPayload });
+        const saved = await updateMut.mutateAsync({
+          id: expenseId,
+          patch: patchPayload,
+          nameToParticipantId: journey.participantIdsByName,
+        });
         onSaved(saved);
       } else {
-        const saved = await addMut.mutateAsync(payload);
+        const saved = await addMut.mutateAsync({
+          expense: payload,
+          nameToParticipantId: journey.participantIdsByName,
+        });
         onSaved(saved);
       }
     } catch (error) {
