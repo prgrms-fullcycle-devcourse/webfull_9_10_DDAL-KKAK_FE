@@ -52,6 +52,19 @@ export function getJourneyPhase(startDate: string, endDate: string): JourneyPhas
   return 'past';
 }
 
+/** API `status`와 무관하게 달력만으로 여행 단계를 맞출 때 (백엔드 기본값 active 오분류 방지) */
+export type JourneyCalendarStatus = 'planned' | 'active' | 'ended';
+
+export function journeyStatusFromDates(
+  startDate: string,
+  endDate: string,
+): JourneyCalendarStatus | null {
+  const start = startOfLocalDayFromDateKey(startDate);
+  const end = startOfLocalDayFromDateKey(endDate);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return null;
+  return getTripStatusLabel(startDate, endDate).tone;
+}
+
 /** 여행 총 일수 (시작일/종료일 포함) */
 export function getTripDays(startDate: string, endDate: string): number {
   const s = startOfLocalDayFromDateKey(startDate);

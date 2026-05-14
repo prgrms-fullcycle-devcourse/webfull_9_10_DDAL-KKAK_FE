@@ -9,6 +9,7 @@ import { useJourneyQuery } from '@/features/journeys/queries';
 import { expenseMyShareLocal, sumMySpendKRW, sumMySpendLocal } from '@/features/settlement/calc';
 import { dateKeyOf, timeLabelOf } from '@/lib/datetime';
 import { demoRateForCurrency } from '@/lib/currencyRates';
+import { getTripStatusLabel } from '@/lib/dates';
 import { formatKRW, formatLocal } from '@/lib/money';
 
 /** 'YYYY-MM-DD' wall-clock 기준 일차 계산 (1일차부터). */
@@ -117,11 +118,12 @@ export function JourneyTimelinePage() {
   const totalDays = Math.round((end.getTime() - start.getTime()) / 86_400_000) + 1;
   const tripDateRange = `${journey.startDate.replaceAll('-', '.')} ~ ${journey.endDate.replaceAll('-', '.')} · ${totalDays}일`;
 
+  const tripTone = getTripStatusLabel(journey.startDate, journey.endDate).tone;
   const statusBadge = {
     active: { label: '여행 중', className: 'bg-green-100 text-green-600' },
     planned: { label: '예정', className: 'bg-blue-100 text-blue-600' },
     ended: { label: '종료', className: 'bg-slate-100 text-slate-400' },
-  }[journey.status];
+  }[tripTone];
 
   return (
     <div className="relative min-h-dvh bg-white pb-20">
