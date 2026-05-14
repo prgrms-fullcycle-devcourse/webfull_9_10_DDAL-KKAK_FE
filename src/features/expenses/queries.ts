@@ -17,7 +17,6 @@ import {
 } from '@/features/expenses/storage';
 import { fetchTrips } from '@/features/journeys/api';
 import type { Journey } from '@/features/journeys/types';
-import { loadJourneys } from '@/features/journeys/storage';
 import { isDemoLocalOnlyJourneyId } from '@/mocks/data';
 
 async function sleep(ms: number) {
