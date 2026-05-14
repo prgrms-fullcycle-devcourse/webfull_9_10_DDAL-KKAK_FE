@@ -191,15 +191,21 @@ function fromApiExpense(raw: unknown, fallback: Expense): Expense {
         : typeof raw.payerParticipantId === 'string'
           ? raw.payerParticipantId
           : fallback.payer,
-    splitMode:
-      raw.splitMode === 'shared' || raw.splitMode === 'personal'
-        ? raw.splitMode
-        : fallback.splitMode,
     ...(() => {
       const parsed = parseSplitWithFromApi(raw.splitWith);
+      const resolvedSplitWith = parsed.names.length ? parsed.names : fallback.splitWith;
+      // 백엔드가 splitMode를 응답에 포함하지 않으므로 splitWith 인원수로 추론
+      // splitWith가 2명 이상이면 shared, 아니면 fallback(기본 personal) 사용
+      const resolvedSplitMode: Expense['splitMode'] =
+        raw.splitMode === 'shared' || raw.splitMode === 'personal'
+          ? raw.splitMode
+          : resolvedSplitWith.length > 1
+            ? 'shared'
+            : fallback.splitMode;
       return {
+        splitMode: resolvedSplitMode,
         splitWithParticipants: parsed.participants,
-        splitWith: parsed.names.length ? parsed.names : fallback.splitWith,
+        splitWith: resolvedSplitWith,
       };
     })(),
     method: typeof raw.method === 'string' ? (raw.method as Expense['method']) : fallback.method,

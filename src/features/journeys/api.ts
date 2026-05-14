@@ -150,10 +150,18 @@ function serializeTrip(input: Partial<Journey> & { name?: string }): Record<stri
 }
 
 async function addParticipant(tripId: string, name: string): Promise<{ id: string; name: string }> {
-  return apiFetch(`/trips/${tripId}/participants`, {
-    method: 'POST',
-    body: JSON.stringify({ name }),
-  });
+  try {
+    return await apiFetch(`/trips/${tripId}/participants`, {
+      method: 'POST',
+      body: JSON.stringify({ name }),
+    });
+  } catch (e) {
+    // 409 = 이미 존재하는 참여자 → 재시도 시 발생, 성공으로 처리
+    if (e instanceof ApiError && e.status === 409) {
+      return { id: '', name };
+    }
+    throw e;
+  }
 }
 
 async function removeParticipant(tripId: string, participantId: string): Promise<void> {
@@ -267,13 +275,15 @@ export async function createTrip(input: CreateTripInput): Promise<Journey> {
     // 여행 생성 후 참여자 개별 등록 — 백엔드 정산 요약은 DB 참가자 행이 있어야 동작
     const namesToRegister =
       input.participants?.length > 0 ? input.participants : [input.selfParticipant?.trim() || '나'];
+    // API 응답에 budgetKrw 없을 때 입력값 보존
+    const budgetKRW = trip.budgetKRW ?? input.budgetKRW;
     try {
       const participantIdsByName = await syncParticipantsWithRetry(trip.id, {}, namesToRegister);
       saveParticipantsCache(trip.id, namesToRegister, participantIdsByName);
-      return { ...trip, participants: namesToRegister, participantIdsByName };
+      return { ...trip, budgetKRW, participants: namesToRegister, participantIdsByName };
     } catch {
       saveParticipantsCache(trip.id, namesToRegister, {});
-      return { ...trip, participants: namesToRegister };
+      return { ...trip, budgetKRW, participants: namesToRegister };
     }
   } catch (e) {
     if (e instanceof ApiError && (e.status === 401 || e.status === 404 || e.status === 501)) {
@@ -299,6 +309,8 @@ export async function updateTrip(tripId: string, patch: Partial<Journey>): Promi
       body: JSON.stringify(serializeTrip(patch)),
     });
     const trip = normalizeJourney(updated);
+    // API 응답에 budgetKrw 없을 때 입력값 보존
+    const budgetKRW = trip.budgetKRW ?? patch.budgetKRW;
 
     // 참여자 diff: 기존 ID 맵과 새 목록 비교 (실패해도 여행 수정은 성공 유지)
     if (patch.participants !== undefined) {
@@ -310,15 +322,15 @@ export async function updateTrip(tripId: string, patch: Partial<Journey>): Promi
           patch.participants,
         );
         saveParticipantsCache(tripId, patch.participants, participantIdsByName);
-        return { ...trip, participants: patch.participants, participantIdsByName };
+        return { ...trip, budgetKRW, participants: patch.participants, participantIdsByName };
       } catch {
         // 백엔드 API 실패해도 로컬 캐시에는 저장
         saveParticipantsCache(tripId, patch.participants, patch.participantIdsByName ?? {});
-        return { ...trip, participants: patch.participants };
+        return { ...trip, budgetKRW, participants: patch.participants };
       }
     }
 
-    return trip;
+    return { ...trip, budgetKRW };
   } catch (e) {
     if (e instanceof ApiError && (e.status === 401 || e.status === 404 || e.status === 501)) {
       // 백엔드가 아직 해당 기능을 제공하지 않는(404/501) 데모 환경일 때만 로컬로 폴백.
