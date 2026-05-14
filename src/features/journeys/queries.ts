@@ -72,6 +72,7 @@ export function useCreateJourneyMutation() {
     onSuccess: (newJourney) => {
       qc.setQueryData<Journey[]>(['journeys'], (prev = []) => [newJourney, ...prev]);
       qc.setQueryData(['journeys', newJourney.id], newJourney);
+      void qc.invalidateQueries({ queryKey: ['expenses'] });
     },
   });
 }
@@ -117,6 +118,7 @@ export function useDeleteJourneyMutation() {
       qc.setQueryData<Journey[]>(['journeys'], (prev = []) => prev.filter((j) => j.id !== id));
       qc.removeQueries({ queryKey: ['journeys', id] });
       qc.removeQueries({ queryKey: ['expenses', id] });
+      void qc.invalidateQueries({ queryKey: ['expenses'] });
     },
   });
 }
