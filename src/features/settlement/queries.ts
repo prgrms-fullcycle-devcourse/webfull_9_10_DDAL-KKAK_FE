@@ -10,7 +10,7 @@ import {
   type SettlementData,
   type SettlementSummaryData,
 } from './api';
-import { calcSettlement, ledgerSelfName, sumMySpendLocal, sumMySpendKRW } from './calc';
+import { calcSettlement, ledgerSelfName, splitNamesForExpense, sumMySpendLocal, sumMySpendKRW } from './calc';
 
 /** 백엔드에 `GET …/settlement/summary`가 없을 때 매번 404가 찍히는 것을 줄이기 위해, 한 번 404면 이 SPA 세션에서는 요청 생략. */
 const settlementSummaryUseLocalOnly = new Set<string>();
@@ -63,7 +63,7 @@ function buildLocalSettlementFromJourney(journeyIn: Journey): SettlementData {
       if (e.splitMode === 'personal') {
         return sum + (e.payer === p ? e.amountLocal : 0);
       }
-      const splitPeople = e.splitWith.filter((x) => people.includes(x));
+      const splitPeople = splitNamesForExpense(e).filter((x) => people.includes(x));
       const list = splitPeople.length ? splitPeople : people;
       const n = Math.max(list.length, 1);
       return sum + (list.includes(p) ? e.amountLocal / n : 0);

@@ -91,13 +91,19 @@ export function useAllExpensesQuery(userId?: string) {
 export function useAddExpenseMutation(userId?: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (expense: Expense) => {
+    mutationFn: async ({
+      expense,
+      nameToParticipantId,
+    }: {
+      expense: Expense;
+      nameToParticipantId?: Record<string, string>;
+    }) => {
       await sleep(100);
       if (!userId || !hasBackendAuth()) {
         return addExpense(expense).find((e) => e.id === expense.id) ?? expense;
       }
       try {
-        return await createExpenseApi({ expense });
+        return await createExpenseApi({ expense, nameToParticipantId });
       } catch (error) {
         if (isApiNotAvailable(error)) {
           // 백엔드 미구현 환경에서는 로컬 저장으로 폴백
@@ -141,9 +147,11 @@ export function useUpdateExpenseMutation(userId?: string) {
     mutationFn: async ({
       id,
       patch,
+      nameToParticipantId,
     }: {
       id: string;
       patch: Omit<Partial<Expense>, 'receiptId'> & { journeyId: string; receiptId?: string | null };
+      nameToParticipantId?: Record<string, string>;
     }) => {
       await sleep(100);
       // React Query 캐시 우선 조회 → 없으면 로컬 스토리지
@@ -164,7 +172,7 @@ export function useUpdateExpenseMutation(userId?: string) {
       };
       if (userId && hasBackendAuth()) {
         try {
-          return await patchExpenseApi({ expenseId: id, patch, fallback });
+          return await patchExpenseApi({ expenseId: id, patch, fallback, nameToParticipantId });
         } catch (error) {
           if (!isApiNotAvailable(error)) throw error;
           // 폴백: 로컬 저장
