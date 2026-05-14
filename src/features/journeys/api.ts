@@ -266,9 +266,7 @@ export async function createTrip(input: CreateTripInput): Promise<Journey> {
 
     // 여행 생성 후 참여자 개별 등록 — 백엔드 정산 요약은 DB 참가자 행이 있어야 동작
     const namesToRegister =
-      input.participants?.length > 0
-        ? input.participants
-        : [input.selfParticipant?.trim() || '나'];
+      input.participants?.length > 0 ? input.participants : [input.selfParticipant?.trim() || '나'];
     try {
       const participantIdsByName = await syncParticipantsWithRetry(trip.id, {}, namesToRegister);
       saveParticipantsCache(trip.id, namesToRegister, participantIdsByName);
