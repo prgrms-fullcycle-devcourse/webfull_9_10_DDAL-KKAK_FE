@@ -18,6 +18,13 @@ export const MOCK_JOURNEYS: Journey[] = [
   },
 ];
 
+/** 로그인(API) 모드에서 서버에 없는 데모 전용 trip id — 지출 목록 API 호출 생략 */
+export const DEMO_LOCAL_ONLY_JOURNEY_IDS = new Set(MOCK_JOURNEYS.map((j) => j.id));
+
+export function isDemoLocalOnlyJourneyId(tripId: string): boolean {
+  return DEMO_LOCAL_ONLY_JOURNEY_IDS.has(tripId);
+}
+
 export const MOCK_EXPENSES: Expense[] = [
   {
     id: '101',

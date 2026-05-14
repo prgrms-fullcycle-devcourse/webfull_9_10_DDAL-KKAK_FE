@@ -15,7 +15,10 @@ import {
   loadAllExpenses,
   updateExpense,
 } from '@/features/expenses/storage';
+import { fetchTrips } from '@/features/journeys/api';
+import type { Journey } from '@/features/journeys/types';
 import { loadJourneys } from '@/features/journeys/storage';
+import { isDemoLocalOnlyJourneyId } from '@/mocks/data';
 
 async function sleep(ms: number) {
   await new Promise((r) => setTimeout(r, ms));
@@ -23,6 +26,10 @@ async function sleep(ms: number) {
 
 function shouldUseExpenseFallback(): boolean {
   return import.meta.env.DEV || import.meta.env.VITE_USE_MOCK === 'true';
+}
+
+function hasBackendAuth(): boolean {
+  return !!localStorage.getItem('tt_access_token_v1');
 }
 
 export function useExpensesQuery(journeyId: string | undefined, userId?: string) {
@@ -33,10 +40,17 @@ export function useExpensesQuery(journeyId: string | undefined, userId?: string)
       await sleep(80);
       if (!journeyId) return [];
       if (!userId) return loadAllExpenses().filter((e) => e.journeyId === journeyId);
+      if (hasBackendAuth() && isDemoLocalOnlyJourneyId(journeyId)) {
+        return loadAllExpenses().filter((e) => e.journeyId === journeyId);
+      }
       try {
         return await listExpensesApi({ tripId: journeyId, userId });
       } catch (error) {
-        if (shouldUseExpenseFallback() && error instanceof ExpenseApiError && error.status === 404) {
+        if (
+          shouldUseExpenseFallback() &&
+          error instanceof ExpenseApiError &&
+          error.status === 404
+        ) {
           return loadAllExpenses().filter((e) => e.journeyId === journeyId);
         }
         throw error;
@@ -46,17 +60,34 @@ export function useExpensesQuery(journeyId: string | undefined, userId?: string)
 }
 
 export function useAllExpensesQuery(userId?: string) {
+  const qc = useQueryClient();
   return useQuery({
     queryKey: ['expenses'],
     queryFn: async (): Promise<Expense[]> => {
       await sleep(80);
       if (!userId) return loadAllExpenses();
       try {
-        const tripIds = loadJourneys().map((j) => j.id);
-        const rows = await Promise.all(tripIds.map((tripId) => listExpensesApi({ tripId, userId })));
+        let trips: Journey[];
+        if (hasBackendAuth()) {
+          const cached = qc.getQueryData<Journey[]>(['journeys']);
+          trips = cached !== undefined ? cached : await fetchTrips();
+        } else {
+          trips = loadJourneys();
+        }
+        const tripIds = trips
+          .map((j) => j.id)
+          .filter((id) => !(hasBackendAuth() && isDemoLocalOnlyJourneyId(id)));
+        if (tripIds.length === 0) return [];
+        const rows = await Promise.all(
+          tripIds.map((tripId) => listExpensesApi({ tripId, userId })),
+        );
         return rows.flat();
       } catch (error) {
-        if (shouldUseExpenseFallback() && error instanceof ExpenseApiError && error.status === 404) {
+        if (
+          shouldUseExpenseFallback() &&
+          error instanceof ExpenseApiError &&
+          error.status === 404
+        ) {
           return loadAllExpenses();
         }
         throw error;
@@ -104,7 +135,11 @@ export function useExpenseQuery(expenseId: string | undefined, userId?: string) 
           return await getExpenseApi({ expenseId, userId });
         } catch (error) {
           if (
-            !(shouldUseExpenseFallback() && error instanceof ExpenseApiError && error.status === 404)
+            !(
+              shouldUseExpenseFallback() &&
+              error instanceof ExpenseApiError &&
+              error.status === 404
+            )
           ) {
             throw error;
           }
@@ -135,7 +170,11 @@ export function useUpdateExpenseMutation(userId?: string) {
         ...patch,
         id,
         receiptId:
-          patch.receiptId === null ? undefined : patch.receiptId === undefined ? current.receiptId : patch.receiptId,
+          patch.receiptId === null
+            ? undefined
+            : patch.receiptId === undefined
+              ? current.receiptId
+              : patch.receiptId,
         updatedAt: new Date().toISOString(),
       };
       if (userId) {
@@ -143,7 +182,11 @@ export function useUpdateExpenseMutation(userId?: string) {
           return await patchExpenseApi({ expenseId: id, patch, fallback, userId });
         } catch (error) {
           if (
-            !(shouldUseExpenseFallback() && error instanceof ExpenseApiError && error.status === 404)
+            !(
+              shouldUseExpenseFallback() &&
+              error instanceof ExpenseApiError &&
+              error.status === 404
+            )
           ) {
             throw error;
           }
@@ -175,7 +218,11 @@ export function useDeleteExpenseMutation(userId?: string) {
           await deleteExpenseApi({ expenseId: id, userId });
         } catch (error) {
           if (
-            !(shouldUseExpenseFallback() && error instanceof ExpenseApiError && error.status === 404)
+            !(
+              shouldUseExpenseFallback() &&
+              error instanceof ExpenseApiError &&
+              error.status === 404
+            )
           ) {
             throw error;
           }
