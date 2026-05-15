@@ -1,4 +1,5 @@
 import { BarChart3, Camera, Clock, Edit2, Pencil, User as UserIcon } from 'lucide-react';
+import { emojiForCategory } from '@/features/expenses/expenseCategory';
 import { useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Fab, FabStack } from '@/components/layout/Fab';
@@ -9,6 +10,7 @@ import { useJourneyQuery } from '@/features/journeys/queries';
 import { expenseMyShareLocal, sumMySpendKRW, sumMySpendLocal } from '@/features/settlement/calc';
 import { dateKeyOf, timeLabelOf } from '@/lib/datetime';
 import { demoRateForCurrency } from '@/lib/currencyRates';
+import { getTripStatusLabel } from '@/lib/dates';
 import { formatKRW, formatLocal } from '@/lib/money';
 
 /** 'YYYY-MM-DD' wall-clock 기준 일차 계산 (1일차부터). */
@@ -117,11 +119,12 @@ export function JourneyTimelinePage() {
   const totalDays = Math.round((end.getTime() - start.getTime()) / 86_400_000) + 1;
   const tripDateRange = `${journey.startDate.replaceAll('-', '.')} ~ ${journey.endDate.replaceAll('-', '.')} · ${totalDays}일`;
 
+  const tripTone = getTripStatusLabel(journey.startDate, journey.endDate).tone;
   const statusBadge = {
     active: { label: '여행 중', className: 'bg-green-100 text-green-600' },
     planned: { label: '예정', className: 'bg-blue-100 text-blue-600' },
     ended: { label: '종료', className: 'bg-slate-100 text-slate-400' },
-  }[journey.status];
+  }[tripTone];
 
   return (
     <div className="relative min-h-dvh bg-white pb-20">
@@ -329,7 +332,7 @@ export function JourneyTimelinePage() {
                       >
                         <div className="mb-2 flex items-start justify-between">
                           <div className="flex items-center gap-3">
-                            <span className="text-3xl drop-shadow-sm">{e.emoji}</span>
+                            <span className="text-3xl drop-shadow-sm">{emojiForCategory(e.category)}</span>
                             <div>
                               <div className="mb-1 flex items-center gap-2">
                                 <h4 className="text-base font-black leading-none text-slate-900">

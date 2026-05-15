@@ -36,3 +36,6 @@ coverage
 
 # TypeScript incremental build info
 *.tsbuildinfo
+
+# Claude Code worktrees (내부 작업 임시 폴더)
+.claude/worktrees/

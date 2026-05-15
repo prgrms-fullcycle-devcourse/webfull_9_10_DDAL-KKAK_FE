@@ -1,6 +1,12 @@
 import { ApiError, apiFetch } from '@/lib/api';
-import { displayExpenseCategory, toApiExpenseCategory } from '@/features/expenses/expenseCategory';
+import {
+  displayExpenseCategory,
+  emojiForCategory,
+  toApiExpenseCategory,
+} from '@/features/expenses/expenseCategory';
 import type { Expense, ExpenseSplitParticipant } from '@/features/expenses/types';
+
+
 
 export class ExpenseApiError extends Error {
   code?: string;
@@ -68,19 +74,19 @@ type ExpensePayloadInput =
   | (Partial<Expense> & { journeyId: string })
   | (Omit<Partial<Expense>, 'receiptId'> & { journeyId: string; receiptId?: string | null });
 
-/** POST/PATCH: splitWithParticipantIds — 이름→id 맵이 있을 때만 채움(없으면 키 생략). */
+/** POST/PATCH: splitWithParticipantIds — 백엔드는 string[] 형식 기대 */
 function splitWithParticipantIdsForPayload(
   expense: ExpensePayloadInput,
   nameToParticipantId?: Record<string, string>,
-): { participantId: string }[] | undefined {
+): string[] | undefined {
   if (!('splitMode' in expense) || expense.splitMode === undefined) return undefined;
 
   if (expense.splitMode === 'personal') {
     const pid = expense.payerParticipantId?.trim();
-    if (pid) return [{ participantId: pid }];
+    if (pid) return [pid];
     if (nameToParticipantId && expense.payer) {
       const id = nameToParticipantId[expense.payer];
-      if (id) return [{ participantId: id }];
+      if (id) return [id];
     }
     return [];
   }
@@ -90,7 +96,7 @@ function splitWithParticipantIdsForPayload(
   if (!nameToParticipantId) return undefined;
   const ids = [...new Set(names.map((n) => nameToParticipantId[n]).filter(Boolean))] as string[];
   if (ids.length === 0) return undefined;
-  return ids.map((participantId) => ({ participantId }));
+  return ids;
 }
 
 function toExpensePayload(
@@ -222,6 +228,15 @@ function fromApiExpense(raw: unknown, fallback: Expense): Expense {
     // 카테고리: 백엔드 enum → 표시용 문자열로 변환
     category:
       typeof raw.category === 'string' ? displayExpenseCategory(raw.category) : fallback.category,
+    // 이모지: 카테고리에서 자동 파생 (백엔드 category 기준)
+    emoji: (() => {
+      const cat = typeof raw.category === 'string' ? raw.category : '';
+      if (cat) return emojiForCategory(displayExpenseCategory(cat));
+      // category 없으면 fallback emoji도 category 기반으로 파생
+      const fallbackCat = fallback.category ?? '';
+      if (fallbackCat) return emojiForCategory(fallbackCat);
+      return emojiForCategory('기타');
+    })(),
     updatedAt: typeof raw.updatedAt === 'string' ? raw.updatedAt : fallback.updatedAt,
     createdAt: typeof raw.createdAt === 'string' ? raw.createdAt : fallback.createdAt,
   };

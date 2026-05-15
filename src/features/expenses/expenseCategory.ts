@@ -21,11 +21,11 @@ const LABEL_TO_API: Record<string, ExpenseCategoryCode> = {
   투어: 'TOUR',
 };
 
-const API_TO_DISPLAY: Record<ExpenseCategoryCode, string> = {
-  FOOD: '식비',
+export const API_TO_DISPLAY: Record<ExpenseCategoryCode, string> = {
+  FOOD: '음식',
   SHOPPING: '쇼핑',
   TRANSPORT: '교통',
-  TOUR: '관광',
+  TOUR: '투어',
   ETC: '기타',
 };
 
@@ -50,4 +50,59 @@ export function displayExpenseCategory(code: string | undefined): string {
   const v = String(code).trim();
   if (API_CODE_SET.has(v)) return API_TO_DISPLAY[v as ExpenseCategoryCode] ?? '기타';
   return v;
+}
+
+/** 카테고리별 대표 이모지 */
+export const CATEGORY_EMOJI: Record<ExpenseCategoryCode, string> = {
+  FOOD: '🍽️',
+  SHOPPING: '🛍️',
+  TRANSPORT: '🚌',
+  TOUR: '🎵',
+  ETC: '➕',
+};
+
+/** 카테고리 선택 UI용 목록 (코드·라벨·이모지) */
+export const CATEGORY_OPTIONS: { code: ExpenseCategoryCode; label: string; emoji: string }[] = [
+  { code: 'FOOD', label: '음식', emoji: '🍽️' },
+  { code: 'SHOPPING', label: '쇼핑', emoji: '🛍️' },
+  { code: 'TRANSPORT', label: '교통', emoji: '🚌' },
+  { code: 'TOUR', label: '투어', emoji: '🎵' },
+  { code: 'ETC', label: '기타', emoji: '➕' },
+];
+
+/** 카테고리(한글 라벨 or API 코드) → 대표 이모지 */
+export function emojiForCategory(category: string | undefined): string {
+  if (!category) return '🧾';
+  const code = toApiExpenseCategory(category);
+  return CATEGORY_EMOJI[code] ?? '🧾';
+}
+
+/** 이모지 → 카테고리 코드 매핑 (ExpenseForm의 EMOJI_LIST 전체 커버) */
+export const EMOJI_TO_CATEGORY: Record<string, ExpenseCategoryCode> = {
+  // 식비 FOOD
+  '🍜': 'FOOD', '🍣': 'FOOD', '🍕': 'FOOD', '🍔': 'FOOD', '🌮': 'FOOD',
+  '🍱': 'FOOD', '🥗': 'FOOD', '🍰': 'FOOD', '🍩': 'FOOD', '🧁': 'FOOD',
+  '🍺': 'FOOD', '🍵': 'FOOD', '☕': 'FOOD', '🥤': 'FOOD', '🧃': 'FOOD',
+  '🍶': 'FOOD', '🥂': 'FOOD', '🍷': 'FOOD', '🧋': 'FOOD', '🍦': 'FOOD',
+  // 쇼핑 SHOPPING
+  '🛍️': 'SHOPPING', '👗': 'SHOPPING', '👟': 'SHOPPING', '💄': 'SHOPPING',
+  '🎒': 'SHOPPING', '⌚': 'SHOPPING', '📱': 'SHOPPING', '💊': 'SHOPPING',
+  '🧴': 'SHOPPING', '🪥': 'SHOPPING',
+  // 교통 TRANSPORT
+  '🚕': 'TRANSPORT', '🚌': 'TRANSPORT', '🚇': 'TRANSPORT', '✈️': 'TRANSPORT',
+  '🚂': 'TRANSPORT', '🚢': 'TRANSPORT', '🛵': 'TRANSPORT', '🚁': 'TRANSPORT',
+  '🚡': 'TRANSPORT', '🛺': 'TRANSPORT',
+  // 관광 TOUR
+  '🏨': 'TOUR', '🏖️': 'TOUR', '🎡': 'TOUR', '🎭': 'TOUR', '🏛️': 'TOUR',
+  '🎬': 'TOUR', '🎮': 'TOUR', '🎵': 'TOUR', '🎨': 'TOUR', '🏄': 'TOUR',
+  // 기타 ETC
+  '💰': 'ETC', '🧾': 'ETC', '🎁': 'ETC', '🌸': 'ETC', '🗺️': 'ETC',
+  '📸': 'ETC', '🔑': 'ETC', '🧳': 'ETC', '⛽': 'ETC', '🏥': 'ETC',
+};
+
+/** 이모지 → 한글 카테고리 라벨 (카테고리 state용) */
+export function categoryForEmoji(emoji: string | undefined): string {
+  if (!emoji) return '기타';
+  const code = EMOJI_TO_CATEGORY[emoji] ?? 'ETC';
+  return API_TO_DISPLAY[code];
 }
