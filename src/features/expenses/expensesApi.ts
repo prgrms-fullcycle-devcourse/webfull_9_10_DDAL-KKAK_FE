@@ -68,19 +68,19 @@ type ExpensePayloadInput =
   | (Partial<Expense> & { journeyId: string })
   | (Omit<Partial<Expense>, 'receiptId'> & { journeyId: string; receiptId?: string | null });
 
-/** POST/PATCH: splitWithParticipantIds — 이름→id 맵이 있을 때만 채움(없으면 키 생략). */
+/** POST/PATCH: splitWithParticipantIds — 백엔드는 string[] 형식 기대 */
 function splitWithParticipantIdsForPayload(
   expense: ExpensePayloadInput,
   nameToParticipantId?: Record<string, string>,
-): { participantId: string }[] | undefined {
+): string[] | undefined {
   if (!('splitMode' in expense) || expense.splitMode === undefined) return undefined;
 
   if (expense.splitMode === 'personal') {
     const pid = expense.payerParticipantId?.trim();
-    if (pid) return [{ participantId: pid }];
+    if (pid) return [pid];
     if (nameToParticipantId && expense.payer) {
       const id = nameToParticipantId[expense.payer];
-      if (id) return [{ participantId: id }];
+      if (id) return [id];
     }
     return [];
   }
@@ -90,7 +90,7 @@ function splitWithParticipantIdsForPayload(
   if (!nameToParticipantId) return undefined;
   const ids = [...new Set(names.map((n) => nameToParticipantId[n]).filter(Boolean))] as string[];
   if (ids.length === 0) return undefined;
-  return ids.map((participantId) => ({ participantId }));
+  return ids;
 }
 
 function toExpensePayload(
