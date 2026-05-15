@@ -12,6 +12,7 @@ import { getExpenseErrorMessage } from '@/features/expenses/expensesApi';
 import { nowLocalIso, toStoredWallClock } from '@/lib/datetime';
 import { useAuth } from '@/features/auth/useAuth';
 import { deleteReceiptOcrJob, getOcrErrorMessage } from '@/features/ocr/ocrApi';
+import { emojiForCategory } from '@/features/expenses/expenseCategory';
 import { ToastPortal } from '@/components/ui/Toast';
 import { useToast } from '@/components/ui/useToast';
 
@@ -97,7 +98,7 @@ export function OcrPreviewPage() {
           paidAt,
           payer: draft.payer,
           payerParticipantId: resolveParticipantId(draft.payer),
-          emoji: draft.emoji || '🧾',
+          emoji: draft.emoji || emojiForCategory(draft.category),
           fxMode: journey.rateMode === 'fixed' ? 'FIXED' : 'REALTIME',
           fxRateTripToKrw: journey.rate,
           amountKrw: Math.round((Number(draft.amountLocal) || 0) * journey.rate),
@@ -442,7 +443,7 @@ export function OcrPreviewPage() {
                 splitWith: defaultSplitWith,
                 method: 'card',
                 payer: journey.selfParticipant ?? journey.participants[0] ?? '나',
-                emoji: '🧾',
+                emoji: emojiForCategory('기타'),
                 comment: '',
               });
               showToast('OCR 결과를 삭제했어요.');

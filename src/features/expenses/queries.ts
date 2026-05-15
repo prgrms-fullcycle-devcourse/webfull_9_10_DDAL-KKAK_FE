@@ -114,6 +114,11 @@ export function useAddExpenseMutation(userId?: string) {
     },
     onSuccess: (saved) => {
       qc.setQueryData(['expense', saved.id], saved);
+      // 리스트 캐시에도 직접 삽입 → refetch 전에 즉시 올바른 emoji 표시
+      qc.setQueryData<Expense[]>(['expenses', saved.journeyId], (prev = []) => {
+        const without = prev.filter((e) => e.id !== saved.id);
+        return [saved, ...without].sort((a, b) => (a.paidAt < b.paidAt ? 1 : -1));
+      });
       qc.invalidateQueries({ queryKey: ['expenses', saved.journeyId] });
       qc.invalidateQueries({ queryKey: ['expenses'] });
     },
@@ -187,6 +192,10 @@ export function useUpdateExpenseMutation(userId?: string) {
     },
     onSuccess: (updated) => {
       qc.setQueryData(['expense', updated.id], updated);
+      // 리스트 캐시도 직접 업데이트 → refetch 전에 즉시 올바른 emoji 표시
+      qc.setQueryData<Expense[]>(['expenses', updated.journeyId], (prev = []) =>
+        prev.map((e) => (e.id === updated.id ? updated : e)),
+      );
       qc.invalidateQueries({ queryKey: ['expenses', updated.journeyId] });
       qc.invalidateQueries({ queryKey: ['expenses'] });
     },
