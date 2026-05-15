@@ -21,7 +21,7 @@ const LABEL_TO_API: Record<string, ExpenseCategoryCode> = {
   투어: 'TOUR',
 };
 
-const API_TO_DISPLAY: Record<ExpenseCategoryCode, string> = {
+export const API_TO_DISPLAY: Record<ExpenseCategoryCode, string> = {
   FOOD: '식비',
   SHOPPING: '쇼핑',
   TRANSPORT: '교통',
@@ -75,4 +75,34 @@ export function emojiForCategory(category: string | undefined): string {
   if (!category) return '🧾';
   const code = toApiExpenseCategory(category);
   return CATEGORY_EMOJI[code] ?? '🧾';
+}
+
+/** 이모지 → 카테고리 코드 매핑 (ExpenseForm의 EMOJI_LIST 전체 커버) */
+export const EMOJI_TO_CATEGORY: Record<string, ExpenseCategoryCode> = {
+  // 식비 FOOD
+  '🍜': 'FOOD', '🍣': 'FOOD', '🍕': 'FOOD', '🍔': 'FOOD', '🌮': 'FOOD',
+  '🍱': 'FOOD', '🥗': 'FOOD', '🍰': 'FOOD', '🍩': 'FOOD', '🧁': 'FOOD',
+  '🍺': 'FOOD', '🍵': 'FOOD', '☕': 'FOOD', '🥤': 'FOOD', '🧃': 'FOOD',
+  '🍶': 'FOOD', '🥂': 'FOOD', '🍷': 'FOOD', '🧋': 'FOOD', '🍦': 'FOOD',
+  // 쇼핑 SHOPPING
+  '🛍️': 'SHOPPING', '👗': 'SHOPPING', '👟': 'SHOPPING', '💄': 'SHOPPING',
+  '🎒': 'SHOPPING', '⌚': 'SHOPPING', '📱': 'SHOPPING', '💊': 'SHOPPING',
+  '🧴': 'SHOPPING', '🪥': 'SHOPPING',
+  // 교통 TRANSPORT
+  '🚕': 'TRANSPORT', '🚌': 'TRANSPORT', '🚇': 'TRANSPORT', '✈️': 'TRANSPORT',
+  '🚂': 'TRANSPORT', '🚢': 'TRANSPORT', '🛵': 'TRANSPORT', '🚁': 'TRANSPORT',
+  '🚡': 'TRANSPORT', '🛺': 'TRANSPORT',
+  // 관광 TOUR
+  '🏨': 'TOUR', '🏖️': 'TOUR', '🎡': 'TOUR', '🎭': 'TOUR', '🏛️': 'TOUR',
+  '🎬': 'TOUR', '🎮': 'TOUR', '🎵': 'TOUR', '🎨': 'TOUR', '🏄': 'TOUR',
+  // 기타 ETC
+  '💰': 'ETC', '🧾': 'ETC', '🎁': 'ETC', '🌸': 'ETC', '🗺️': 'ETC',
+  '📸': 'ETC', '🔑': 'ETC', '🧳': 'ETC', '⛽': 'ETC', '🏥': 'ETC',
+};
+
+/** 이모지 → 한글 카테고리 라벨 (카테고리 state용) */
+export function categoryForEmoji(emoji: string | undefined): string {
+  if (!emoji) return '기타';
+  const code = EMOJI_TO_CATEGORY[emoji] ?? 'ETC';
+  return API_TO_DISPLAY[code];
 }

@@ -16,6 +16,7 @@ import { useAuth } from '@/features/auth/useAuth';
 import { getExpenseErrorMessage } from '@/features/expenses/expensesApi';
 import {
   CATEGORY_OPTIONS,
+  categoryForEmoji,
   emojiForCategory,
   toApiExpenseCategory,
 } from '@/features/expenses/expenseCategory';
@@ -381,6 +382,7 @@ export function ExpenseForm({
                     type="button"
                     onClick={() => {
                       setEmoji(e);
+                      setCategory(categoryForEmoji(e));
                       setShowEmojiPicker(false);
                     }}
                     className={`flex items-center justify-center rounded-xl py-1.5 text-xl transition active:scale-90 ${
