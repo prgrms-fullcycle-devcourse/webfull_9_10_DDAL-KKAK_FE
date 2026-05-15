@@ -1,46 +1,16 @@
-import { useMemo } from 'react';
-import { useParams } from 'react-router-dom';
 import { TopBar } from '@/components/layout/TopBar';
-import { useAuth } from '@/features/auth/useAuth';
-import { useExpensesQuery } from '@/features/expenses/queries';
 import { useJourneyQuery } from '@/features/journeys/queries';
-import { hourOf } from '@/lib/datetime';
+import { useReportQuery } from '@/features/report/queries';
+import { useParams } from 'react-router-dom';
 
 export function InsightPage() {
   const { journeyId } = useParams();
-  const { user } = useAuth();
   const { data: journey } = useJourneyQuery(journeyId);
-  const { data: expenses = [] } = useExpensesQuery(journeyId, user?.id);
+  const { data: reportData, isLoading } = useReportQuery(journeyId);
 
-  const summary = useMemo(() => {
-    if (!expenses.length) return null;
+  if (isLoading || !journey) return <InsightSkeleton />;
 
-    const byCategory: Record<string, number> = {};
-    let lateNight = 0;
-    for (const e of expenses) {
-      const category = e.category ?? '기타';
-      byCategory[category] = (byCategory[category] ?? 0) + e.amountLocal;
-      if (hourOf(e.paidAt) >= 22) lateNight += 1;
-    }
-
-    const top = Object.entries(byCategory).sort((a, b) => b[1] - a[1])[0];
-    const topCat = top?.[0] ?? '기타';
-    const topRatio = top
-      ? Math.round((top[1] / Object.values(byCategory).reduce((a, v) => a + v, 0)) * 100)
-      : 0;
-    const lateRatio = Math.round((lateNight / Math.max(expenses.length, 1)) * 100);
-
-    const title =
-      topCat === '식비'
-        ? '밤을 잊은 미식가'
-        : topCat === '쇼핑'
-          ? '살까 말까? 사버린 타입'
-          : '기록하는 여행자';
-
-    return { title, topCat, topRatio, lateRatio };
-  }, [expenses]);
-
-  if (!journey) return <InsightSkeleton />;
+  const { report, statistics } = reportData ?? {};
 
   return (
     <div className="min-h-dvh bg-slate-50 pb-10">
@@ -53,20 +23,11 @@ export function InsightPage() {
             Travel Style Analysis
           </span>
           <h3 className="mb-4 text-2xl font-black">
-            {summary ? `"${summary.title}"` : '"아직 데이터가 없어요"'}
+            {report ? `"${report.consumptionStyle}"` : '"분석 중..."'}
           </h3>
-          {summary ? (
+          {report ? (
             <p className="text-sm font-bold leading-relaxed text-slate-600">
-              이번 여행은 <span className="font-black text-blue-600">{summary.topCat}</span> 비중이{' '}
-              <span className="font-black text-blue-600">{summary.topRatio}%</span>로 가장 높아요.
-              {summary.lateRatio >= 35 ? (
-                <>
-                  {' '}
-                  또 밤 10시 이후 지출이{' '}
-                  <span className="font-black text-blue-600">{summary.lateRatio}%</span>로 많은
-                  편이에요.
-                </>
-              ) : null}
+              {report.totalAnalysis}
             </p>
           ) : (
             <p className="text-sm font-bold leading-relaxed text-slate-500">
@@ -75,26 +36,72 @@ export function InsightPage() {
           )}
         </section>
 
-        <section className="rounded-3xl border border-slate-100 bg-white p-6">
-          <p className="text-[10px] font-black uppercase tracking-widest text-slate-300">
-            Quick facts
-          </p>
-          <div className="mt-3 grid grid-cols-2 gap-3">
-            <div className="rounded-2xl bg-slate-50 p-4">
-              <p className="text-[10px] font-black uppercase tracking-widest text-slate-300">
-                영수증 수
-              </p>
-              <p className="mt-2 text-lg font-black text-slate-900">{expenses.length}개</p>
-            </div>
-            <div className="rounded-2xl bg-slate-50 p-4">
-              <p className="text-[10px] font-black uppercase tracking-widest text-slate-300">
-                밤 10시 이후
-              </p>
-              <p className="mt-2 text-lg font-black text-slate-900">
-                {expenses.filter((e) => hourOf(e.paidAt) >= 22).length}개
-              </p>
-            </div>
+        <section className="grid grid-cols-2 gap-3">
+          <div className="rounded-3xl border border-slate-100 bg-white p-5">
+            <p className="text-[10px] font-black uppercase tracking-widest text-slate-300">
+              총 지출 건수
+            </p>
+            <p className="mt-2 text-lg font-black text-slate-900">{statistics?.expenseCount}개</p>
           </div>
+          <div className="rounded-3xl border border-slate-100 bg-white p-5">
+            <p className="text-[10px] font-black uppercase tracking-widest text-slate-300">
+              주요 카테고리
+            </p>
+            <p className="mt-2 text-lg font-black text-blue-600">{statistics?.mostSpentCategory}</p>
+          </div>
+          <div className="rounded-3xl border border-slate-100 bg-white p-5">
+            <p className="text-[10px] font-black uppercase tracking-widest text-slate-300">
+              총 지출액
+            </p>
+            <p className="mt-2 text-lg font-black text-slate-900">
+              {statistics?.totalAmountKrw.toLocaleString()}원
+            </p>
+          </div>
+          <div className="rounded-3xl border border-slate-100 bg-white p-5">
+            <p className="text-[10px] font-black uppercase tracking-widest text-slate-300">
+              하루 평균 지출액
+            </p>
+            <p className="mt-2 text-lg font-black text-slate-900">
+              {statistics?.dailyAverageKrw.toLocaleString()}원
+            </p>
+          </div>
+        </section>
+
+        <section className="rounded-3xl border border-slate-100 bg-white p-6">
+          <h4 className="mb-4 text-xs font-black uppercase tracking-widest text-slate-400">
+            카테고리 분석
+          </h4>
+          <div className="space-y-4">
+            {report?.categoryInsights.map((item, idx) => (
+              <div key={idx} className="flex flex-col gap-1 border-l-2 border-blue-500 pl-4">
+                <div className="flex justify-between items-center">
+                  <span className="font-black text-slate-800">{item.category}</span>
+                  <span className="text-xs font-bold text-slate-400">
+                    {item.amount.toLocaleString()}원
+                  </span>
+                </div>
+                <p className="text-sm text-slate-500 leading-snug">{item.insight}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="rounded-3xl bg-blue-600 p-6 text-white shadow-lg shadow-blue-200">
+          <div className="mb-4 flex items-center gap-2">
+            <span className="text-lg">💡</span>
+            <h4 className="text-sm font-black">AI가 제안하는 더 나은 여행</h4>
+          </div>
+          <ul className="space-y-3">
+            {report?.suggestions.map((suggestion, idx) => (
+              <li
+                key={idx}
+                className="flex gap-2 text-sm font-bold leading-relaxed text-blue-50/90"
+              >
+                <span className="opacity-50">#</span>
+                {suggestion}
+              </li>
+            ))}
+          </ul>
         </section>
       </main>
     </div>
