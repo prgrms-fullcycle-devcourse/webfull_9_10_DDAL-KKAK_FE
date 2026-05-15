@@ -51,3 +51,28 @@ export function displayExpenseCategory(code: string | undefined): string {
   if (API_CODE_SET.has(v)) return API_TO_DISPLAY[v as ExpenseCategoryCode] ?? '기타';
   return v;
 }
+
+/** 카테고리별 대표 이모지 */
+export const CATEGORY_EMOJI: Record<ExpenseCategoryCode, string> = {
+  FOOD: '🍜',
+  SHOPPING: '🛍️',
+  TRANSPORT: '🚕',
+  TOUR: '🏖️',
+  ETC: '🧾',
+};
+
+/** 카테고리 선택 UI용 목록 (코드·라벨·이모지) */
+export const CATEGORY_OPTIONS: { code: ExpenseCategoryCode; label: string; emoji: string }[] = [
+  { code: 'FOOD', label: '식비', emoji: '🍜' },
+  { code: 'SHOPPING', label: '쇼핑', emoji: '🛍️' },
+  { code: 'TRANSPORT', label: '교통', emoji: '🚕' },
+  { code: 'TOUR', label: '관광', emoji: '🏖️' },
+  { code: 'ETC', label: '기타', emoji: '🧾' },
+];
+
+/** 카테고리(한글 라벨 or API 코드) → 대표 이모지 */
+export function emojiForCategory(category: string | undefined): string {
+  if (!category) return '🧾';
+  const code = toApiExpenseCategory(category);
+  return CATEGORY_EMOJI[code] ?? '🧾';
+}

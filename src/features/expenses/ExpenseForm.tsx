@@ -14,6 +14,11 @@ import { useToast } from '@/components/ui/useToast';
 import { nowLocalIso, toStoredWallClock } from '@/lib/datetime';
 import { useAuth } from '@/features/auth/useAuth';
 import { getExpenseErrorMessage } from '@/features/expenses/expensesApi';
+import {
+  CATEGORY_OPTIONS,
+  emojiForCategory,
+  toApiExpenseCategory,
+} from '@/features/expenses/expenseCategory';
 import { demoRateForCurrency, getRealtimeRate } from '@/lib/currencyRates';
 
 type Mode = 'create' | 'edit' | 'ocr';
@@ -49,7 +54,8 @@ export function ExpenseForm({
   const { showToast, toasts } = useToast();
 
   // ── state ──
-  const [emoji, setEmoji] = useState('🍚');
+  const [category, setCategory] = useState<string>('기타');
+  const [emoji, setEmoji] = useState('🧾');
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
 
   const EMOJI_LIST = [
@@ -137,7 +143,14 @@ export function ExpenseForm({
     const src = existing ?? initialDraft;
     if (!src) return;
 
-    if (src.emoji) setEmoji(src.emoji);
+    if (src.category) {
+      setCategory(src.category);
+      // 이모지가 없거나 기본값이면 카테고리 대표 이모지로 자동 설정
+      if (!src.emoji || src.emoji === '🧾') {
+        setEmoji(emojiForCategory(src.category));
+      }
+    }
+    if (src.emoji && src.emoji !== '🧾') setEmoji(src.emoji);
     if (src.storeName) setStoreName(src.storeName);
     if (src.amountLocal !== undefined) setAmountLocal(src.amountLocal);
     if (src.paidAt) setPaidAt(src.paidAt.slice(0, 16));
@@ -228,7 +241,7 @@ export function ExpenseForm({
       receiptId: receiptId.trim() || undefined,
       emoji,
       storeName: storeName.trim() || '(이름 없음)',
-      category: '기타',
+      category,
       amountLocal,
       currency: journey.currency,
       paidAt: toStoredWallClock(paidAt),
@@ -309,6 +322,36 @@ export function ExpenseForm({
             className="w-full rounded-2xl border border-slate-100"
           />
         )}
+
+        {/* 카테고리 */}
+        <section>
+          <label className="mb-2 block text-[10px] font-black uppercase tracking-widest text-slate-400">
+            카테고리
+          </label>
+          <div className="flex gap-2 overflow-x-auto pb-1">
+            {CATEGORY_OPTIONS.map((opt) => {
+              const selected = toApiExpenseCategory(category) === opt.code;
+              return (
+                <button
+                  key={opt.code}
+                  type="button"
+                  onClick={() => {
+                    setCategory(opt.label);
+                    setEmoji(opt.emoji);
+                  }}
+                  className={`flex shrink-0 flex-col items-center gap-1 rounded-2xl border-2 px-4 py-2 text-xs font-black transition active:scale-95 ${
+                    selected
+                      ? 'border-blue-600 bg-blue-50 text-blue-600'
+                      : 'border-slate-100 bg-slate-50 text-slate-500'
+                  }`}
+                >
+                  <span className="text-xl">{opt.emoji}</span>
+                  <span>{opt.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </section>
 
         {/* 이모지 + 가게명 */}
         <section className="space-y-2">
