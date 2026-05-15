@@ -370,9 +370,11 @@ export async function createExpenseApi(params: {
   } catch (error) {
     throw toExpenseApiError(error, '지출 생성 실패');
   }
+  // 백엔드가 emoji를 저장하지 않으므로 fromApiExpense 전에 localStorage에 캐시
+  // (fromApiExpense 내부에서 loadExpenseEmoji를 조회하므로 먼저 저장해야 함)
+  const rawId = isRecord(data) && typeof data.id === 'string' ? data.id : undefined;
+  if (rawId && params.expense.emoji) saveExpenseEmoji(rawId, params.expense.emoji);
   const created = fromApiExpense(data, params.expense);
-  // 백엔드가 emoji를 저장하지 않으므로 localStorage에 캐시
-  if (created.id && params.expense.emoji) saveExpenseEmoji(created.id, params.expense.emoji);
   return created;
 }
 
@@ -393,10 +395,10 @@ export async function patchExpenseApi(params: {
   } catch (error) {
     throw toExpenseApiError(error, '지출 수정 실패');
   }
-  const updated = fromApiExpense(data, params.fallback);
-  // 백엔드가 emoji를 저장하지 않으므로 localStorage에 캐시
+  // 백엔드가 emoji를 저장하지 않으므로 fromApiExpense 전에 localStorage에 캐시
   const emojiToSave = params.patch.emoji ?? params.fallback.emoji;
   if (params.expenseId && emojiToSave) saveExpenseEmoji(params.expenseId, emojiToSave);
+  const updated = fromApiExpense(data, params.fallback);
   return updated;
 }
 
