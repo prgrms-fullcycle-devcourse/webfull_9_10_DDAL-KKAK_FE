@@ -1,4 +1,5 @@
 import { BarChart3, Camera, Clock, Edit2, Pencil, User as UserIcon } from 'lucide-react';
+import { emojiForCategory } from '@/features/expenses/expenseCategory';
 import { useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Fab, FabStack } from '@/components/layout/Fab';
@@ -331,7 +332,7 @@ export function JourneyTimelinePage() {
                       >
                         <div className="mb-2 flex items-start justify-between">
                           <div className="flex items-center gap-3">
-                            <span className="text-3xl drop-shadow-sm">{e.emoji}</span>
+                            <span className="text-3xl drop-shadow-sm">{emojiForCategory(e.category)}</span>
                             <div>
                               <div className="mb-1 flex items-center gap-2">
                                 <h4 className="text-base font-black leading-none text-slate-900">

@@ -6,47 +6,7 @@ import {
 } from '@/features/expenses/expenseCategory';
 import type { Expense, ExpenseSplitParticipant } from '@/features/expenses/types';
 
-// ─── localStorage emoji 캐시 ──────────────────────────────────────────────────
-// 백엔드가 emoji 필드를 저장/반환하지 않으므로 expenseId → emoji 를 로컬에 보존
-const EXPENSE_EMOJI_LS_KEY = 'dk_expense_emoji_v1';
 
-function _readEmojiMap(): Record<string, string> {
-  try {
-    return JSON.parse(localStorage.getItem(EXPENSE_EMOJI_LS_KEY) ?? '{}') as Record<string, string>;
-  } catch {
-    return {};
-  }
-}
-
-/** 지출 생성/수정 성공 후 호출 — expenseId 에 emoji 저장 */
-function saveExpenseEmoji(expenseId: string, emoji: string | undefined): void {
-  if (!expenseId || !emoji) return;
-  const map = _readEmojiMap();
-  map[expenseId] = emoji;
-  try {
-    localStorage.setItem(EXPENSE_EMOJI_LS_KEY, JSON.stringify(map));
-  } catch {
-    /* 용량 초과 등 무시 */
-  }
-}
-
-/** 저장된 emoji 조회 (없으면 undefined) */
-function loadExpenseEmoji(expenseId: string): string | undefined {
-  return _readEmojiMap()[expenseId];
-}
-
-/** 지출 삭제 시 캐시 정리 */
-export function removeExpenseEmojiCache(expenseId: string): void {
-  const map = _readEmojiMap();
-  if (!(expenseId in map)) return;
-  delete map[expenseId];
-  try {
-    localStorage.setItem(EXPENSE_EMOJI_LS_KEY, JSON.stringify(map));
-  } catch {
-    /* 무시 */
-  }
-}
-// ─────────────────────────────────────────────────────────────────────────────
 
 export class ExpenseApiError extends Error {
   code?: string;
@@ -268,15 +228,14 @@ function fromApiExpense(raw: unknown, fallback: Expense): Expense {
     // 카테고리: 백엔드 enum → 표시용 문자열로 변환
     category:
       typeof raw.category === 'string' ? displayExpenseCategory(raw.category) : fallback.category,
-    // 이모지: ① 백엔드 반환값 ② localStorage 캐시 ③ 카테고리 추론 순으로 사용
+    // 이모지: 카테고리에서 자동 파생 (백엔드 category 기준)
     emoji: (() => {
-      if (typeof raw.emoji === 'string' && raw.emoji.trim()) return raw.emoji.trim();
-      const expId = typeof raw.id === 'string' ? raw.id : fallback.id;
-      const cached = expId ? loadExpenseEmoji(expId) : undefined;
-      if (cached) return cached;
       const cat = typeof raw.category === 'string' ? raw.category : '';
       if (cat) return emojiForCategory(displayExpenseCategory(cat));
-      return fallback.emoji;
+      // category 없으면 fallback emoji도 category 기반으로 파생
+      const fallbackCat = fallback.category ?? '';
+      if (fallbackCat) return emojiForCategory(fallbackCat);
+      return emojiForCategory('기타');
     })(),
     updatedAt: typeof raw.updatedAt === 'string' ? raw.updatedAt : fallback.updatedAt,
     createdAt: typeof raw.createdAt === 'string' ? raw.createdAt : fallback.createdAt,
@@ -351,8 +310,6 @@ export async function deleteExpenseApi(params: { expenseId: string }): Promise<v
   } catch (error) {
     throw toExpenseApiError(error, '지출 삭제 실패');
   }
-  // 삭제된 지출의 emoji 캐시 정리
-  removeExpenseEmojiCache(params.expenseId);
 }
 
 export async function createExpenseApi(params: {
@@ -370,12 +327,7 @@ export async function createExpenseApi(params: {
   } catch (error) {
     throw toExpenseApiError(error, '지출 생성 실패');
   }
-  // 백엔드가 emoji를 저장하지 않으므로 fromApiExpense 전에 localStorage에 캐시
-  // (fromApiExpense 내부에서 loadExpenseEmoji를 조회하므로 먼저 저장해야 함)
-  const rawId = isRecord(data) && typeof data.id === 'string' ? data.id : undefined;
-  if (rawId && params.expense.emoji) saveExpenseEmoji(rawId, params.expense.emoji);
-  const created = fromApiExpense(data, params.expense);
-  return created;
+  return fromApiExpense(data, params.expense);
 }
 
 export async function patchExpenseApi(params: {
@@ -395,11 +347,7 @@ export async function patchExpenseApi(params: {
   } catch (error) {
     throw toExpenseApiError(error, '지출 수정 실패');
   }
-  // 백엔드가 emoji를 저장하지 않으므로 fromApiExpense 전에 localStorage에 캐시
-  const emojiToSave = params.patch.emoji ?? params.fallback.emoji;
-  if (params.expenseId && emojiToSave) saveExpenseEmoji(params.expenseId, emojiToSave);
-  const updated = fromApiExpense(data, params.fallback);
-  return updated;
+  return fromApiExpense(data, params.fallback);
 }
 
 export function getExpenseErrorMessage(error: unknown): string {

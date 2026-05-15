@@ -16,7 +16,6 @@ import { useAuth } from '@/features/auth/useAuth';
 import { getExpenseErrorMessage } from '@/features/expenses/expensesApi';
 import {
   CATEGORY_OPTIONS,
-  categoryForEmoji,
   emojiForCategory,
   toApiExpenseCategory,
 } from '@/features/expenses/expenseCategory';
@@ -56,71 +55,6 @@ export function ExpenseForm({
 
   // ── state ──
   const [category, setCategory] = useState<string>('기타');
-  const [emoji, setEmoji] = useState('🧾');
-  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
-
-  const EMOJI_LIST = [
-    '🍜',
-    '🍣',
-    '🍕',
-    '🍔',
-    '🌮',
-    '🍱',
-    '🥗',
-    '🍰',
-    '🍩',
-    '🧁',
-    '🍺',
-    '🍵',
-    '☕',
-    '🥤',
-    '🧃',
-    '🍶',
-    '🥂',
-    '🍷',
-    '🧋',
-    '🍦',
-    '🛍️',
-    '👗',
-    '👟',
-    '💄',
-    '🎒',
-    '⌚',
-    '📱',
-    '💊',
-    '🧴',
-    '🪥',
-    '🚕',
-    '🚌',
-    '🚇',
-    '✈️',
-    '🚂',
-    '🚢',
-    '🛵',
-    '🚁',
-    '🚡',
-    '🛺',
-    '🏨',
-    '🏖️',
-    '🎡',
-    '🎭',
-    '🏛️',
-    '🎬',
-    '🎮',
-    '🎵',
-    '🎨',
-    '🏄',
-    '💰',
-    '🧾',
-    '🎁',
-    '🌸',
-    '🗺️',
-    '📸',
-    '🔑',
-    '🧳',
-    '⛽',
-    '🏥',
-  ];
   const [storeName, setStoreName] = useState('');
   const [amountLocal, setAmountLocal] = useState<number | ''>('');
   const [paidAt, setPaidAt] = useState(() => nowLocalIso());
@@ -144,14 +78,7 @@ export function ExpenseForm({
     const src = existing ?? initialDraft;
     if (!src) return;
 
-    if (src.category) {
-      setCategory(src.category);
-      // 이모지가 없거나 기본값이면 카테고리 대표 이모지로 자동 설정
-      if (!src.emoji || src.emoji === '🧾') {
-        setEmoji(emojiForCategory(src.category));
-      }
-    }
-    if (src.emoji && src.emoji !== '🧾') setEmoji(src.emoji);
+    if (src.category) setCategory(src.category);
     if (src.storeName) setStoreName(src.storeName);
     if (src.amountLocal !== undefined) setAmountLocal(src.amountLocal);
     if (src.paidAt) setPaidAt(src.paidAt.slice(0, 16));
@@ -240,7 +167,7 @@ export function ExpenseForm({
       id: expenseId ?? crypto.randomUUID(),
       journeyId,
       receiptId: receiptId.trim() || undefined,
-      emoji,
+      emoji: emojiForCategory(category),
       storeName: storeName.trim() || '(이름 없음)',
       category,
       amountLocal,
@@ -336,10 +263,7 @@ export function ExpenseForm({
                 <button
                   key={opt.code}
                   type="button"
-                  onClick={() => {
-                    setCategory(opt.label);
-                    setEmoji(opt.emoji);
-                  }}
+                  onClick={() => setCategory(opt.label)}
                   className={`flex shrink-0 flex-col items-center gap-1 rounded-2xl border-2 px-4 py-2 text-xs font-black transition active:scale-95 ${
                     selected
                       ? 'border-blue-600 bg-blue-50 text-blue-600'
@@ -354,47 +278,17 @@ export function ExpenseForm({
           </div>
         </section>
 
-        {/* 이모지 + 가게명 */}
-        <section className="space-y-2">
-          <div className="grid grid-cols-[auto_1fr] gap-3">
-            <button
-              type="button"
-              onClick={() => setShowEmojiPicker((v) => !v)}
-              className={`size-14 rounded-2xl border text-2xl transition active:scale-95 ${
-                showEmojiPicker ? 'border-blue-400 bg-blue-50' : 'border-slate-100 bg-slate-50'
-              }`}
-            >
-              {emoji}
-            </button>
-            <input
-              value={storeName}
-              onChange={(e) => setStoreName(e.target.value)}
-              placeholder="가게명"
-              className="rounded-2xl border border-slate-100 bg-slate-50 px-4 text-sm font-bold outline-none focus:border-blue-500"
-            />
-          </div>
-          {showEmojiPicker && (
-            <div className="rounded-2xl border border-slate-100 bg-slate-50 p-3">
-              <div className="grid grid-cols-10 gap-1">
-                {EMOJI_LIST.map((e) => (
-                  <button
-                    key={e}
-                    type="button"
-                    onClick={() => {
-                      setEmoji(e);
-                      setCategory(categoryForEmoji(e));
-                      setShowEmojiPicker(false);
-                    }}
-                    className={`flex items-center justify-center rounded-xl py-1.5 text-xl transition active:scale-90 ${
-                      emoji === e ? 'bg-blue-100' : 'hover:bg-slate-100'
-                    }`}
-                  >
-                    {e}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
+        {/* 가게명 */}
+        <section>
+          <label className="mb-2 block text-[10px] font-black uppercase tracking-widest text-slate-400">
+            가게명
+          </label>
+          <input
+            value={storeName}
+            onChange={(e) => setStoreName(e.target.value)}
+            placeholder="가게명을 입력해주세요"
+            className="w-full rounded-2xl border border-slate-100 bg-slate-50 px-4 py-4 text-sm font-bold outline-none focus:border-blue-500"
+          />
         </section>
 
         {/* 금액 */}

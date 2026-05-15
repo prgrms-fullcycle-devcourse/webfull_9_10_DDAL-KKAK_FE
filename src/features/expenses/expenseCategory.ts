@@ -22,10 +22,10 @@ const LABEL_TO_API: Record<string, ExpenseCategoryCode> = {
 };
 
 export const API_TO_DISPLAY: Record<ExpenseCategoryCode, string> = {
-  FOOD: '식비',
+  FOOD: '음식',
   SHOPPING: '쇼핑',
   TRANSPORT: '교통',
-  TOUR: '관광',
+  TOUR: '투어',
   ETC: '기타',
 };
 
@@ -54,20 +54,20 @@ export function displayExpenseCategory(code: string | undefined): string {
 
 /** 카테고리별 대표 이모지 */
 export const CATEGORY_EMOJI: Record<ExpenseCategoryCode, string> = {
-  FOOD: '🍜',
+  FOOD: '🍽️',
   SHOPPING: '🛍️',
-  TRANSPORT: '🚕',
-  TOUR: '🏖️',
-  ETC: '🧾',
+  TRANSPORT: '🚌',
+  TOUR: '🎵',
+  ETC: '➕',
 };
 
 /** 카테고리 선택 UI용 목록 (코드·라벨·이모지) */
 export const CATEGORY_OPTIONS: { code: ExpenseCategoryCode; label: string; emoji: string }[] = [
-  { code: 'FOOD', label: '식비', emoji: '🍜' },
+  { code: 'FOOD', label: '음식', emoji: '🍽️' },
   { code: 'SHOPPING', label: '쇼핑', emoji: '🛍️' },
-  { code: 'TRANSPORT', label: '교통', emoji: '🚕' },
-  { code: 'TOUR', label: '관광', emoji: '🏖️' },
-  { code: 'ETC', label: '기타', emoji: '🧾' },
+  { code: 'TRANSPORT', label: '교통', emoji: '🚌' },
+  { code: 'TOUR', label: '투어', emoji: '🎵' },
+  { code: 'ETC', label: '기타', emoji: '➕' },
 ];
 
 /** 카테고리(한글 라벨 or API 코드) → 대표 이모지 */
