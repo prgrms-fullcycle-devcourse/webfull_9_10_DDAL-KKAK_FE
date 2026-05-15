@@ -1,5 +1,9 @@
 import { ApiError, apiFetch } from '@/lib/api';
-import { displayExpenseCategory, toApiExpenseCategory } from '@/features/expenses/expenseCategory';
+import {
+  displayExpenseCategory,
+  emojiForCategory,
+  toApiExpenseCategory,
+} from '@/features/expenses/expenseCategory';
 import type { Expense, ExpenseSplitParticipant } from '@/features/expenses/types';
 
 export class ExpenseApiError extends Error {
@@ -222,6 +226,13 @@ function fromApiExpense(raw: unknown, fallback: Expense): Expense {
     // 카테고리: 백엔드 enum → 표시용 문자열로 변환
     category:
       typeof raw.category === 'string' ? displayExpenseCategory(raw.category) : fallback.category,
+    // 이모지: 백엔드가 반환하면 사용, 없으면 카테고리로 추론 (🧾 고정 방지)
+    emoji: (() => {
+      if (typeof raw.emoji === 'string' && raw.emoji.trim()) return raw.emoji.trim();
+      const cat = typeof raw.category === 'string' ? raw.category : '';
+      if (cat) return emojiForCategory(displayExpenseCategory(cat));
+      return fallback.emoji;
+    })(),
     updatedAt: typeof raw.updatedAt === 'string' ? raw.updatedAt : fallback.updatedAt,
     createdAt: typeof raw.createdAt === 'string' ? raw.createdAt : fallback.createdAt,
   };
